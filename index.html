@@ -8,265 +8,22 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Karla:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --paper:#F8F1E5;
-    --paper-deep:#F0E5D0;
-    --ink:#2E2014;
-    --ink-soft:#6E5B45;
-    --terra:#BC5127;
-    --terra-deep:#98411F;
-    --sage:#77875F;
-    --gold:#D9A441;
-    --card:#FFFDF7;
-    --line:rgba(46,32,20,.16);
-    --serif:"Fraunces",Georgia,serif;
-    --sans:"Karla",sans-serif;
-  }
-  *{margin:0;padding:0;box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{
-    font-family:var(--sans);
-    background:var(--paper);
-    color:var(--ink);
-    line-height:1.6;
-    overflow-x:hidden;
-  }
-  body::after{
-    content:"";position:fixed;inset:0;pointer-events:none;z-index:999;opacity:.5;
-    background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
-  }
-  ::selection{background:var(--terra);color:var(--paper)}
-
-  .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
-
-  /* ---------- header ----------- */
-  header{
-    position:sticky;top:0;z-index:50;
-    background:color-mix(in srgb,var(--paper) 88%,transparent);
-    backdrop-filter:blur(10px);
-    border-bottom:1px solid var(--line);
-  }
-  .nav{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;max-width:1120px;margin:0 auto}
-  .logo{font-family:var(--serif);font-weight:600;font-size:1.6rem;letter-spacing:-.02em;text-decoration:none;color:var(--ink)}
-  .logo span{color:var(--terra)}
-  .nav-links{display:flex;gap:28px;align-items:center}
-  .nav-links a{color:var(--ink-soft);text-decoration:none;font-size:.95rem;font-weight:500}
-  .nav-links a:hover{color:var(--terra)}
-  .btn{
-    display:inline-block;background:var(--terra);color:#FFF8EE;border:none;cursor:pointer;
-    font-family:var(--sans);font-weight:700;font-size:1rem;
-    padding:13px 26px;border-radius:999px;text-decoration:none;
-    box-shadow:0 2px 0 var(--terra-deep);
-    transition:transform .15s ease,box-shadow .15s ease,background .15s ease;
-  }
-  .btn:hover{transform:translateY(-2px);box-shadow:0 4px 0 var(--terra-deep);background:#C75A2E}
-  .btn.small{padding:9px 20px;font-size:.9rem}
-  .btn.ghost{background:transparent;color:var(--terra);box-shadow:inset 0 0 0 2px var(--terra)}
-  .btn.ghost:hover{background:var(--terra);color:#FFF8EE}
-
-  /* ---------- hero ---------- */
-  .hero{position:relative;padding:84px 0 60px;overflow:hidden}
-  .hero::before{
-    content:"";position:absolute;top:-260px;right:-180px;width:720px;height:720px;border-radius:50%;
-    background:radial-gradient(circle,rgba(217,164,65,.32),rgba(188,81,39,.12) 55%,transparent 70%);
-    pointer-events:none;
-  }
-  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center;position:relative}
-  .kicker{
-    display:inline-flex;align-items:center;gap:9px;
-    font-size:.82rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--terra);
-    margin-bottom:22px;
-  }
-  .kicker::before{content:"";width:26px;height:2px;background:var(--terra)}
-  h1{
-    font-family:var(--serif);font-weight:500;font-size:clamp(2.6rem,5.4vw,4.1rem);
-    line-height:1.06;letter-spacing:-.025em;margin-bottom:24px;
-  }
-  h1 em{font-style:italic;color:var(--terra)}
-  .lede{font-size:1.18rem;color:var(--ink-soft);max-width:32em;margin-bottom:34px}
-  .lede strong{color:var(--ink)}
-  .hero-ctas{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
-  .hero-note{font-size:.85rem;color:var(--ink-soft);margin-top:18px}
-
-  /* phone card */
-  .phone-stack{position:relative;animation:rise .9s ease both .2s}
-  .call-card{
-    background:var(--card);border:1px solid var(--line);border-radius:22px;
-    box-shadow:0 24px 48px -18px rgba(46,32,20,.28);
-    padding:26px;position:relative;transform:rotate(1.5deg);
-  }
-  .call-head{display:flex;align-items:center;gap:14px;padding-bottom:18px;border-bottom:1px dashed var(--line);margin-bottom:18px}
-  .ring{
-    position:relative;width:48px;height:48px;border-radius:50%;flex-shrink:0;
-    background:var(--terra);color:#FFF8EE;display:grid;place-items:center;font-size:1.3rem;
-  }
-  .ring::before,.ring::after{
-    content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--terra);
-    animation:pulse 2.4s ease-out infinite;
-  }
-  .ring::after{animation-delay:1.2s}
-  @keyframes pulse{0%{transform:scale(1);opacity:.7}100%{transform:scale(2);opacity:0}}
-  .call-head b{font-family:var(--serif);font-size:1.15rem;font-weight:600;display:block;line-height:1.2}
-  .call-head small{color:var(--ink-soft);font-size:.85rem}
-  .bubble{max-width:88%;padding:12px 16px;border-radius:16px;font-size:.95rem;margin-bottom:12px;animation:rise .6s ease both}
-  .bubble.etta{background:var(--paper-deep);border-bottom-left-radius:4px}
-  .bubble.etta:first-of-type{animation-delay:.5s}
-  .bubble.margaret{background:var(--terra);color:#FFF8EE;margin-left:auto;border-bottom-right-radius:4px;animation-delay:1.1s}
-  .bubble.etta:last-of-type{animation-delay:1.7s}
-  .bubble .who{display:block;font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.6;margin-bottom:3px}
-  .honest-tag{
-    position:absolute;top:-16px;right:22px;transform:rotate(3deg);
-    background:var(--gold);color:var(--ink);font-weight:700;font-size:.8rem;
-    padding:7px 14px;border-radius:8px;box-shadow:0 3px 8px rgba(46,32,20,.2);
-  }
-  @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
-  .call-card .bubble.margaret{transform:none}
-
-  /* ---------- marquee ---------- */
-  .marquee{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--paper-deep);overflow:hidden;padding:14px 0;margin-top:70px}
-  .marquee-track{display:flex;gap:48px;white-space:nowrap;animation:scroll 36s linear infinite;width:max-content}
-  .marquee-track span{font-family:var(--serif);font-style:italic;font-size:1.05rem;color:var(--ink-soft)}
-  .marquee-track b{color:var(--terra);font-family:var(--sans);font-style:normal;font-weight:700}
-  @keyframes scroll{to{transform:translateX(-50%)}}
-
-  /* ---------- sections ---------- */
-  section{padding:88px 0}
-  .sec-kicker{font-size:.82rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--terra);margin-bottom:14px}
-  h2{font-family:var(--serif);font-weight:500;font-size:clamp(1.9rem,3.6vw,2.7rem);letter-spacing:-.02em;line-height:1.12;margin-bottom:18px;max-width:20em}
-  .sec-lede{color:var(--ink-soft);font-size:1.08rem;max-width:38em}
-
-  /* how it works */
-  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin-top:54px}
-  .step{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:30px 26px;position:relative}
-  .step:nth-child(2){transform:translateY(18px)}
-  .step:nth-child(3){transform:translateY(36px)}
-  .step-num{font-family:var(--serif);font-size:3.4rem;font-weight:400;font-style:italic;color:var(--terra);line-height:1;margin-bottom:14px}
-  .step h3{font-family:var(--serif);font-size:1.3rem;font-weight:600;margin-bottom:10px}
-  .step p{color:var(--ink-soft);font-size:.97rem}
-  .step .flag{
-    display:inline-block;margin-top:14px;background:rgba(119,135,95,.15);color:var(--sage);
-    font-size:.78rem;font-weight:700;padding:5px 12px;border-radius:999px;letter-spacing:.04em;
-  }
-
-  /* summary section — dark */
-  .dark{background:var(--ink);color:var(--paper)}
-  .dark h2{color:var(--paper)}
-  .dark .sec-lede{color:rgba(248,241,229,.65)}
-  .dark-grid{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center}
-  .sms-card{
-    background:#3B2C1D;border:1px solid rgba(248,241,229,.14);border-radius:22px;padding:26px;
-    box-shadow:0 24px 48px -18px rgba(0,0,0,.5);transform:rotate(-1.5deg);
-  }
-  .sms-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;font-size:.85rem;color:rgba(248,241,229,.55)}
-  .sms-head b{font-family:var(--serif);font-size:1.05rem;color:var(--paper);font-weight:600}
-  .sms-body{background:rgba(248,241,229,.07);border-radius:14px;padding:18px;font-size:.97rem;line-height:1.65;color:rgba(248,241,229,.9)}
-  .sms-body mark{background:rgba(217,164,65,.25);color:var(--gold);padding:1px 5px;border-radius:4px}
-  .chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
-  .chip{font-size:.8rem;font-weight:700;padding:6px 13px;border-radius:999px;background:rgba(119,135,95,.25);color:#B9C7A4}
-  .chip.warn{background:rgba(217,164,65,.2);color:var(--gold)}
-  .dark ul{list-style:none;margin-top:26px}
-  .dark li{padding-left:34px;position:relative;margin-bottom:16px;color:rgba(248,241,229,.8)}
-  .dark li::before{content:"☏";position:absolute;left:0;top:0;color:var(--gold);font-size:1.15rem}
-  .dark li b{color:var(--paper)}
-
-  /* pledge */
-  .pledge-card{
-    max-width:720px;margin:54px auto 0;background:var(--card);
-    border:1px solid var(--line);border-radius:6px;padding:54px 58px;position:relative;
-    box-shadow:0 24px 48px -20px rgba(46,32,20,.25);
-  }
-  .pledge-card::before{
-    content:"";position:absolute;inset:10px;border:1px solid var(--line);border-radius:3px;pointer-events:none;
-  }
-  .pledge-card h3{font-family:var(--serif);font-style:italic;font-weight:500;font-size:1.8rem;margin-bottom:26px;text-align:center}
-  .pledge-list{list-style:none}
-  .pledge-list li{
-    font-family:var(--serif);font-size:1.12rem;line-height:1.5;padding:15px 0 15px 40px;position:relative;
-    border-bottom:1px dashed var(--line);
-  }
-  .pledge-list li:last-child{border-bottom:none}
-  .pledge-list li::before{content:"✓";position:absolute;left:6px;color:var(--sage);font-weight:700;font-family:var(--sans)}
-  .signature{
-    font-family:var(--serif);font-style:italic;font-size:1.5rem;color:var(--terra);
-    text-align:right;margin-top:26px;transform:rotate(-2deg);
-  }
-
-  /* pricing */
-  .plans{display:grid;grid-template-columns:1fr 1fr;gap:28px;max-width:820px;margin:54px auto 0}
-  .plan{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:38px 34px;position:relative}
-  .plan.featured{border:2px solid var(--terra);box-shadow:0 24px 48px -20px rgba(188,81,39,.3)}
-  .plan .tag{
-    position:absolute;top:-14px;left:50%;transform:translateX(-50%) rotate(-2deg);
-    background:var(--terra);color:#FFF8EE;font-size:.78rem;font-weight:700;
-    padding:6px 16px;border-radius:999px;white-space:nowrap;
-  }
-  .plan h3{font-family:var(--serif);font-size:1.4rem;font-weight:600;margin-bottom:6px}
-  .plan .freq{color:var(--ink-soft);font-size:.92rem;margin-bottom:20px}
-  .price{font-family:var(--serif);font-size:3rem;font-weight:500;letter-spacing:-.03em;margin-bottom:24px}
-  .price small{font-family:var(--sans);font-size:1rem;color:var(--ink-soft);font-weight:400}
-  .plan ul{list-style:none;margin-bottom:30px}
-  .plan li{padding:9px 0 9px 28px;position:relative;font-size:.96rem;color:var(--ink-soft);border-bottom:1px dashed var(--line)}
-  .plan li:last-child{border-bottom:none}
-  .plan li::before{content:"—";position:absolute;left:2px;color:var(--terra);font-weight:700}
-  .plan .btn{width:100%;text-align:center}
-  .plans-note{text-align:center;color:var(--ink-soft);font-size:.9rem;margin-top:26px}
-
-  /* faq */
-  .faq{max-width:720px;margin:44px auto 0}
-  details{border-bottom:1px solid var(--line)}
-  summary{
-    cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:18px;
-    font-family:var(--serif);font-size:1.18rem;font-weight:500;padding:22px 4px;
-  }
-  summary::-webkit-details-marker{display:none}
-  summary::after{content:"+";font-size:1.5rem;color:var(--terra);transition:transform .25s ease;flex-shrink:0}
-  details[open] summary::after{transform:rotate(45deg)}
-  details p{padding:0 4px 24px;color:var(--ink-soft);max-width:56ch}
-
-  /* waitlist */
-  .waitlist{text-align:center}
-  .waitlist h2{margin-left:auto;margin-right:auto}
-  .waitlist .sec-lede{margin:0 auto 34px}
-
-  /* footer */
-  footer{background:var(--ink);color:rgba(248,241,229,.6);padding:54px 0;font-size:.88rem}
-  .foot-grid{display:flex;justify-content:space-between;gap:32px;flex-wrap:wrap;align-items:flex-start}
-  footer .logo{color:var(--paper);font-size:1.4rem}
-  .draft-note{
-    max-width:46em;background:rgba(217,164,65,.12);border:1px dashed rgba(217,164,65,.5);
-    border-radius:12px;padding:16px 20px;color:var(--gold);margin-top:26px;
-  }
-
-  /* reveal on scroll */
-  .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s ease,transform .7s ease}
-  .reveal.in{opacity:1;transform:none}
-  .step.reveal.in:nth-child(2){transform:translateY(18px)}
-  .step.reveal.in:nth-child(3){transform:translateY(36px)}
-
-  @media (max-width:860px){
-    .hero-grid,.dark-grid{grid-template-columns:1fr;gap:44px}
-    .steps{grid-template-columns:1fr}
-    .step:nth-child(2),.step:nth-child(3){transform:none}
-    .step.reveal.in:nth-child(2),.step.reveal.in:nth-child(3){transform:none}
-    .plans{grid-template-columns:1fr}
-    .nav-links a:not(.btn){display:none}
-    .pledge-card{padding:38px 26px}
-    section{padding:64px 0}
-  }
-</style>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
 <header>
   <nav class="nav">
-    <a class="logo" href="#">etta<span>.</span></a>
+    <a class="logo" href="index.html">etta<span>.</span></a>
     <div class="nav-links">
-      <a href="#how">How it works</a>
-      <a href="#pledge">Our pledge</a>
-      <a href="#pricing">Pricing</a>
-      <a href="#faq">FAQ</a>
-      <a class="btn small" href="#waitlist">Join the waitlist</a>
+      <a href="how-it-works.html">How it works</a>
+      <a href="pledge.html">Our pledge</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="faq.html">FAQ</a>
+    </div>
+    <div class="nav-actions">
+      <button class="btn small" type="button" data-waitlist>Join the waitlist</button>
+      <button class="menu-btn" type="button" aria-label="Menu" aria-expanded="false"><i></i><i></i><i></i></button>
     </div>
   </nav>
 </header>
@@ -283,8 +40,8 @@
           <strong>Always honest about being AI. Always with their consent.</strong>
         </p>
         <div class="hero-ctas">
-          <a class="btn" href="#waitlist">Join the waitlist</a>
-          <a class="btn ghost" href="#how">See how it works</a>
+          <button class="btn" type="button" data-waitlist>Join the waitlist</button>
+          <a class="btn ghost" href="how-it-works.html">See how it works</a>
         </div>
         <p class="hero-note">No app for them to learn. No gadget to wear. Just their own phone, ringing at the same time every day.</p>
       </div>
@@ -293,7 +50,7 @@
         <div class="call-card">
           <div class="honest-tag">Never pretends to be human</div>
           <div class="call-head">
-            <div class="ring">☏</div>
+            <div class="ring">&#x260F;&#xFE0E;</div>
             <div>
               <b>Etta is calling…</b>
               <small>Daily check-in · 8:00 AM</small>
@@ -317,47 +74,21 @@
 
     <div class="marquee" aria-hidden="true">
       <div class="marquee-track">
-        <span>"How did you sleep?"</span><b>✳</b>
-        <span>"Have you eaten today?"</span><b>✳</b>
-        <span>"Did you take your morning meds?"</span><b>✳</b>
-        <span>"What are you up to this afternoon?"</span><b>✳</b>
-        <span>"How's that knee treating you?"</span><b>✳</b>
-        <span>"Tell me about your garden."</span><b>✳</b>
-        <span>"How did you sleep?"</span><b>✳</b>
-        <span>"Have you eaten today?"</span><b>✳</b>
-        <span>"Did you take your morning meds?"</span><b>✳</b>
-        <span>"What are you up to this afternoon?"</span><b>✳</b>
-        <span>"How's that knee treating you?"</span><b>✳</b>
-        <span>"Tell me about your garden."</span><b>✳</b>
+        <span>"How did you sleep?"</span><b>&#x2731;&#xFE0E;</b>
+        <span>"Have you eaten today?"</span><b>&#x2731;&#xFE0E;</b>
+        <span>"Did you take your morning meds?"</span><b>&#x2731;&#xFE0E;</b>
+        <span>"What are you up to this afternoon?"</span><b>&#x2731;&#xFE0E;</b>
+        <span>"How's that knee treating you?"</span><b>&#x2731;&#xFE0E;</b>
+        <span>"Tell me about your garden."</span><b>&#x2731;&#xFE0E;</b>
+        <span>"How did you sleep?"</span><b>&#x2731;&#xFE0E;</b>
+        <span>"Have you eaten today?"</span><b>&#x2731;&#xFE0E;</b>
+        <span>"Did you take your morning meds?"</span><b>&#x2731;&#xFE0E;</b>
+        <span>"What are you up to this afternoon?"</span><b>&#x2731;&#xFE0E;</b>
+        <span>"How's that knee treating you?"</span><b>&#x2731;&#xFE0E;</b>
+        <span>"Tell me about your garden."</span><b>&#x2731;&#xFE0E;</b>
       </div>
     </div>
   </div>
-
-  <section id="how">
-    <div class="wrap">
-      <div class="sec-kicker">How it works</div>
-      <h2>Three steps. The middle one matters most.</h2>
-      <p class="sec-lede">Most services ask the family and start dialing. Etta is different by design: nothing happens until your parent themselves says yes.</p>
-      <div class="steps">
-        <div class="step reveal">
-          <div class="step-num">1.</div>
-          <h3>You set it up</h3>
-          <p>Tell us about your parent — their name, their interests, the best time to call, and who to contact if a call is ever missed. Takes ten minutes.</p>
-        </div>
-        <div class="step reveal">
-          <div class="step-num">2.</div>
-          <h3>They say yes</h3>
-          <p>Before any check-in call ever happens, your parent hears exactly what Etta is — an AI companion — and personally agrees. Often you're sitting right beside them.</p>
-          <span class="flag">Their consent, not just yours</span>
-        </div>
-        <div class="step reveal">
-          <div class="step-num">3.</div>
-          <h3>Etta calls, you know</h3>
-          <p>A warm few minutes each day — sleep, meals, medication, whatever they feel like talking about. Afterwards, a short summary lands in your messages.</p>
-        </div>
-      </div>
-    </div>
-  </section>
 
   <section class="dark">
     <div class="wrap dark-grid">
@@ -373,7 +104,7 @@
       </div>
       <div class="sms-card reveal">
         <div class="sms-head">
-          <b>☀ Morning check-in</b>
+          <b>&#x2600;&#xFE0E; Morning check-in</b>
           <span>8:05 AM · 4 min</span>
         </div>
         <div class="sms-body">
@@ -390,96 +121,42 @@
     </div>
   </section>
 
-  <section id="pledge">
+  <section>
     <div class="wrap">
-      <div class="sec-kicker" style="text-align:center">Our pledge</div>
-      <h2 style="text-align:center;margin-inline:auto">Honesty is the whole point.</h2>
-      <div class="pledge-card reveal">
-        <h3>Etta promises —</h3>
-        <ul class="pledge-list">
-          <li><b>Never to pretend to be human.</b> Every call begins with who — and what — Etta is.</li>
-          <li><b>Never to call without your parent's own consent.</b> They agree before the first call, not after.</li>
-          <li><b>To stop the moment they say stop.</b> "No more calls, thank you" works instantly, on any call.</li>
-          <li><b>Never to sell anything.</b> No offers, no promotions, no sponsored anything. Ever.</li>
-          <li><b>To keep conversations in the family.</b> Summaries go to the people your parent agreed to — no one else.</li>
-        </ul>
-        <div class="signature">— Etta</div>
+      <div class="sec-kicker">Get to know Etta</div>
+      <h2>Everything else, plainly written.</h2>
+      <div class="explore-grid">
+        <a class="explore-card reveal" href="how-it-works.html">
+          <h3>How it works</h3>
+          <p>Three steps — and why the middle one, your parent's own yes, matters most.</p>
+          <span class="go">Read more →</span>
+        </a>
+        <a class="explore-card reveal" href="pledge.html">
+          <h3>Our pledge</h3>
+          <p>Five promises, starting with the big one: Etta never pretends to be human.</p>
+          <span class="go">Read more →</span>
+        </a>
+        <a class="explore-card reveal" href="pricing.html">
+          <h3>Pricing</h3>
+          <p>Less than takeout, more than a sensor. Two simple plans, cancel anytime.</p>
+          <span class="go">Read more →</span>
+        </a>
+        <a class="explore-card reveal" href="faq.html">
+          <h3>FAQ</h3>
+          <p>The things families ask first, answered plainly — consent, privacy, missed calls.</p>
+          <span class="go">Read more →</span>
+        </a>
       </div>
     </div>
   </section>
 
-  <section id="pricing">
-    <div class="wrap">
-      <div class="sec-kicker" style="text-align:center">Pricing</div>
-      <h2 style="text-align:center;margin-inline:auto">Less than takeout. More than a sensor.</h2>
-      <div class="plans">
-        <div class="plan reveal">
-          <h3>Standard</h3>
-          <div class="freq">Three calls a week</div>
-          <div class="price">$19<small> / month</small></div>
-          <ul>
-            <li>Warm check-in calls, 3× weekly</li>
-            <li>Summary by text or email after every call</li>
-            <li>Missed-call retry &amp; family escalation</li>
-            <li>Cancel anytime</li>
-          </ul>
-          <a class="btn ghost" href="#waitlist">Join the waitlist</a>
-        </div>
-        <div class="plan featured reveal">
-          <span class="tag">Most peace of mind</span>
-          <h3>Daily</h3>
-          <div class="freq">A call every single day</div>
-          <div class="price">$39<small> / month</small></div>
-          <ul>
-            <li>Daily check-in calls, seven days a week</li>
-            <li>Weekly trend reports — sleep, mood, appetite</li>
-            <li>Summaries to up to five family members</li>
-            <li>"Ask about it tomorrow" family prompts</li>
-            <li>Priority escalation chain</li>
-          </ul>
-          <a class="btn" href="#waitlist">Join the waitlist</a>
-        </div>
-      </div>
-      <p class="plans-note">Draft pricing — final plans may change before launch. No hardware, no contracts.</p>
-    </div>
-  </section>
-
-  <section id="faq">
-    <div class="wrap">
-      <div class="sec-kicker" style="text-align:center">Questions, answered plainly</div>
-      <h2 style="text-align:center;margin-inline:auto">The things families ask first.</h2>
-      <div class="faq">
-        <details open>
-          <summary>Will my mom know she's talking to an AI?</summary>
-          <p>Yes — always, and proudly. Etta introduces herself as an AI companion at the start of every call. We think trust is the product: a check-in service that starts with a small deception isn't one worth having. Most seniors, once asked honestly, genuinely enjoy having "their" Etta call.</p>
-        </details>
-        <details>
-          <summary>What if she doesn't want the calls?</summary>
-          <p>Then they don't happen. Your parent consents personally before the first check-in call, and can stop the service at any moment just by saying so on a call. Their yes — and their no — always outranks the subscription.</p>
-        </details>
-        <details>
-          <summary>What happens if she doesn't answer?</summary>
-          <p>Etta retries a little later, then sends her a text. If there's still no reply, we work through the contact chain you chose — a neighbor, a sibling, you — so an unanswered phone never just disappears into silence.</p>
-        </details>
-        <details>
-          <summary>Are the calls recorded?</summary>
-          <p>Calls are transcribed to produce the family summary, and your parent is told this plainly when they sign up. Summaries go only to the family members they agreed to. We don't sell data, run ads, or use conversations for marketing — ever.</p>
-        </details>
-        <details>
-          <summary>Is this a medical or emergency service?</summary>
-          <p>No. Etta is a wellbeing and companionship service, not a medical device, and she's no substitute for emergency response. If a call ever suggests something urgent, Etta's job is simple: get the humans who love them informed, fast.</p>
-        </details>
-      </div>
-    </div>
-  </section>
-
-  <section id="waitlist" class="waitlist">
+  <section class="waitlist">
     <div class="wrap">
       <div class="sec-kicker">Early access</div>
       <h2>Be first in line when Etta starts calling.</h2>
       <p class="sec-lede">We're building Etta now, carefully — consent flows first, growth second. Leave your email and we'll write when it's your turn.</p>
-      <a class="btn" href="mailto:hello@ettacalls.com?subject=Etta%20waitlist">Join the waitlist by email</a>
-      <p class="hero-note">Or just reply to tell us about your mom. We read everything.</p>
+      <button class="btn" type="button" data-waitlist>Join the waitlist</button>
+      <p class="hero-note">Prefer email? Write to <a href="mailto:hello@ettacalls.com">hello@ettacalls.com</a> — we read everything.</p>
     </div>
   </section>
 </main>
@@ -488,24 +165,23 @@
   <div class="wrap">
     <div class="foot-grid">
       <div>
-        <a class="logo" href="#">etta<span>.</span></a>
+        <a class="logo" href="index.html">etta<span>.</span></a>
         <p style="margin-top:10px;max-width:34em">The daily call you can't always make — honest about being AI, welcome because of it.</p>
       </div>
-      <div>
-        <p><a href="#pledge" style="color:inherit">Our pledge</a> · <a href="#faq" style="color:inherit">FAQ</a> · <a href="#pricing" style="color:inherit">Pricing</a></p>
+      <div class="foot-links">
+        <a href="how-it-works.html">How it works</a>
+        <a href="pledge.html">Our pledge</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="faq.html">FAQ</a>
+        <a href="mailto:hello@ettacalls.com">hello@ettacalls.com</a>
       </div>
     </div>
     <div class="draft-note">
-      ⚠ Etta is an early-stage concept. This page is a design draft for feedback — not a live service. Pricing, features and availability may change. Nothing here is medical advice or an emergency service.
+      &#x26A0;&#xFE0E; Etta is an early-stage concept. This page is a design draft for feedback — not a live service. Pricing, features and availability may change. Nothing here is medical advice or an emergency service.
     </div>
   </div>
 </footer>
 
-<script>
-  const io = new IntersectionObserver((entries)=>{
-    entries.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
-  },{threshold:.15});
-  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
-</script>
+<script src="app.js"></script>
 </body>
 </html>
