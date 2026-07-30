@@ -1,0 +1,304 @@
+Legal disclosure requirements
+for an AI wellbeing-call product
+(US & UK)
+Bottom line: a compliant version of this product is realistic to
+build in both the US and the UK — but only if it discloses that
+the caller is AI and obtains consent from the elderly recipient
+(not just the family who pays). No jurisdiction outright bans a
+benign, human-indistinguishable AI voice, but the entire legal
+architecture in the US and the transparency regimes in the UK/
+EU are built around the principle that the person on the line
+must be able to know they are talking to a machine. The design
+goal of being "indistinguishable from a human" is precisely what
+converts a low-risk product into a legally exposed one. The
+leading competitors that have survived press scrutiny (inTouch,
+ElderVoice) already disclose AI identity and gate calls on the
+senior's own consent — which is both the ethical and the legal
+safe harbor.
+The single biggest legal constraint is not a disclosure statute but the
+TCPA consent rule: because a daily AI call uses an "artificial or
+prerecorded voice," it requires the prior express consent of the person
+actually being called — and courts have held that a family member
+cannot supply that consent unless they are the phone's subscriber/
+customary user or an authorized agent of the recipient. That directly
+complicates the "family member sets up the service" model.
+
+US federal law: consent is mandatory now;
+an explicit "this is AI" disclosure is
+proposed but not yet law
+AI-generated voices are already regulated under the TCPA. On
+February 8, 2024, the FCC released a Declaratory Ruling (CG Docket
+23-362, FCC 24-17) confirming that the TCPA's restrictions on "artificial
+or prerecorded voice" encompass current AI technologies that
+generate human voices, including voice cloning, and that such calls
+"require the prior express consent of the called party to initiate such
+calls absent an emergency purpose or exemption." fcc The ruling was
+effective on release and explicitly refused to carve out technologies that
+"purport to provide the equivalent of a live agent." fcc A conversational
+AI check-in call is squarely within this definition.
+What the TCPA requires today for such calls: (1) prior express
+consent of the called party; (2) at the beginning of the message, a
+clear statement of the identity of the entity responsible for the call; and
+(3) during or after the message, the entity's telephone number or
+address. cornell cornell So a caller-identity disclosure ("This is [service
+name] calling on behalf of your family") is already legally required for
+artificial-voice calls — but a statement that the voice is AI is not yet.
+An explicit AI disclosure is only proposed, not in force. In an
+NPRM published September 10, 2024 (FCC 24-84), the FCC proposed to
+require callers to "clearly disclose... at the beginning of each call... that
+the call is using AI-generated technology," plus AI-specific consent
+disclosures. federalregister As of July 2026 this remains a proposed
+rule — the current CFR text (47 CFR § 64.1200) still requires only caller
+identity and number, not an AI disclosure, and no final Report and Order
+adopting the AI-disclosure requirement was located. cornell
+federalregister Ethan should design for this rule as if it will pass,
+since the direction of federal policy is unambiguous and the product
+would be an obvious target.
+
+The telemarketing distinction helps but does not exempt the
+product. The strictest rules (prior express written consent) attach to
+calls that "include or introduce an advertisement or constitute
+telemarketing." cornell A wellbeing check-in is not telemarketing, which
+lowers the bar. However, the residential-landline exemption for non-
+commercial artificial-voice calls only covers callers making no more
+than three calls in any 30-day period — a daily call blows past that
+limit, re-triggering the consent requirement. cornell So consent is
+unavoidable regardless of the non-sales framing.
+The consent problem the payer model creates. The TCPA requires
+consent of the "called party." The FCC and courts define this as the
+phone's current subscriber or its customary user, not merely the
+intended recipient or a third party who set things up. epic The Eleventh
+Circuit (Osorio) held that only the subscriber can consent, "either directly
+or through an authorized agent," and that a housemate "had no
+authority to consent in her own right." findlaw The Ninth Circuit (N.L. v.
+Credit One) held that "consent from the intended recipient... is not
+sufficient" — the actual called party must consent. uscourts
+Implication: a family member can only validly consent if the elderly
+person's phone is on the family member's account (making them the
+subscriber) or the family member is acting as the recipient's authorized
+agent. The safest design gets the elderly recipient's own consent —
+which, notably, is exactly what inTouch does in practice (see below).
+US state law: California is the binding
+constraint; Texas and Florida are not
+State coverage is uneven, and — importantly — several of the newer
+AI-disclosure statutes are tied to "trade/commerce," "consumer
+transactions," or "regulated occupations," meaning their
+applicability to a paid-but-non-sales wellbeing call is arguable. The
+clearest exposure is California.
+
+Applicability to
+Law What it requires
+this product
+For calls via an automatic
+dialing-announcing device, a live Likely applies;
+"unrecorded, natural voice" ambiguity is whether
+CA AB must state call nature + a real-time
+2905 (eff. business identity, ask consent to conversational AI
+~Jan 1, hear the message, and inform counts as a
+2025) the person if the message "prerecorded
+uses an "artificial voice" (AI- message" under the
+generated/altered) leginfo autodialer statute
+getaira
+Prohibits using an AI chatbot in
+trade/commerce in a way that
+could mislead a reasonable Directly on point for
+Maine 10 consumer into thinking they're voice AI; turns on
+M.R.S. § talking to a human, unless whether the call is
+1500-DD clearly notified they are not; "trade or commerce
+definition explicitly includes with a consumer"
+"aural" (voice) communication
+maine
+Any AI system "intended to
+Colorado
+interact with consumers" must
+C.R.S. § Applies once
+disclose that the consumer is
+6-1-1704 effective if a CO
+interacting with an AI system,
+(eff. June resident is called
+unless obvious to a reasonable
+30, 2026)
+person justia
+Must disclose interaction with Applies on a
+Utah SB generative AI (not a human) if prompted basis; a
+226 (eff. the person asks; stricter senior asking "are
+May 7, proactive disclosure for "high- you a real person?"
+2025) risk"/regulated-occupation triggers a duty to
+interactions utah answer honestly
+
+Applicability to
+Law What it requires
+this product
+Bot-disclosure duty — but
+CA SB explicitly limited to "online"
+Does not apply to
+1001 (BOT internet communications and
+voice phone calls
+Act) to intent-to-mislead for a sale or
+election leginfo
+Texas and Florida impose no applicable AI-voice disclosure
+requirement. Texas SB 140 (effective September 1, 2025) — which the
+command flagged — turns out on inspection of the enrolled text to
+contain no AI/artificial-voice disclosure requirement at all; it
+amends telephone-solicitation definitions and seller-registration rules,
+and "telephone solicitation" is defined as a call to induce a person to
+"purchase, rent, claim, or receive an item." texas A non-sales wellbeing
+call falls outside Chapter 302 entirely. texas Texas's synthesized-voice
+consent rules are likewise tied to solicitation contexts. Florida's
+telemarketing statute prohibits disguising a caller's voice "to defraud,
+confuse, or injure," and regulates automated sales calls, but has no
+general AI-disclosure mandate for a benign check-in. flsenate So the
+two named states are not the constraint — California is.
+The California AB 2602 / SB 1381 lead was a false trail. AB 2602
+governs contract enforceability for "digital replicas" of performers' voices
+in entertainment/creative work — not triggered by an AI wellbeing call.
+leginfo SB 1381 expands child-sexual-abuse-material criminal law to AI-
+generated content — wholly irrelevant here. leginfo The canvas note
+should be corrected: the relevant California statute is AB 2905, not
+those two.
+FTC exposure is about deception, not disclosure per se. The FTC's
+Impersonation Rule (16 CFR Part 461, effective April 1, 2024) targets
+falsely posing as a government entity or business ecfr; the
+Telemarketing Sales Rule governs sales calls. ecfr The FTC has flagged AI
+voice cloning as a deception/enforcement priority under its Section 5
+authority. ftc None of this bans a disclosed AI voice, but it confirms that
+
+an undisclosed, human-mimicking AI voice is the fact pattern regulators
+are hunting.
+UK law: no AI-voice-specific rule, but
+transparency principles apply and PECR
+probably doesn't bite
+The UK has no Ofcom rule specifically requiring disclosure that a
+call is AI-generated; Ofcom's telephone guidance addresses nuisance/
+silent calls and marketing identity/opt-out, not AI voices. ofcom Notably,
+the ICO in September 2025 fined two energy firms for unlawful
+marketing calls that used "avatar software" to make recipients think
+they were speaking to named humans — a signal that human-mimicking
+AI voices draw regulatory scrutiny, though that case was a marketing
+PECR breach. ico
+PECR's automated-call rules likely do not apply, because they are
+limited to direct marketing. The ICO states that "routine customer
+service messages do not count as direct marketing" and that the
+definition doesn't cover live calls for "administrative or customer service
+purposes." ico PECR Regulation 19's consent requirement applies to
+"recorded matter for direct marketing purposes" via automated calling
+systems. legislation A genuine, non-promotional wellbeing call therefore
+falls outside the strict automated-marketing consent regime — a
+meaningful advantage over the US position. This holds only if the calls
+never carry promotional content or harvest data for future marketing.
+UK GDPR / ICO transparency still applies because the product
+processes personal (and health-adjacent) data. The ICO requires
+processing to be "lawful, fair and transparent," and states processing is
+"unlikely to be considered transparent" if the organisation is not open
+about how AI is used. ico ico Recording conversations requires telling
+people it's happening. ico This is a transparency/consent obligation, not
+an "announce AI" mandate, but disclosing AI identity is the natural way
+to satisfy fairness for a cognitively vulnerable data subject.
+
+Consumer protection and the Online Safety Act. Under the Digital
+Markets, Competition and Consumers Act 2024, a "misleading omission"
+requires an omission of material information within a "commercial
+practice" affecting a transactional decision legislation — no authority
+treats an undisclosed AI voice in a non-marketing call as per se unfair,
+though aggressive non-disclosure to a vulnerable person could
+theoretically be argued. The Online Safety Act 2023 does not apply:
+it regulates user-to-user and search internet services and expressly
+exempts services whose only user content is "one-to-one live aural
+communications." legislation legislation
+The "indistinguishable AI" question: no
+jurisdiction bans it, but disclosure regimes
+make hiding it the offence
+Across the US, UK, and EU, there is no law making it illegal to use a
+human-indistinguishable AI voice for a benign purpose per se.
+The illegality in every regime attaches to non-disclosure or intent to
+deceive, not to the quality of the voice:
+• US state laws (Maine, Colorado, Utah, CA SB 1001) criminalize/
+penalize the failure to disclose or intent to mislead — not
+indistinguishability itself. maine justia leginfo
+• The UK Fraud Act 2006 requires dishonesty plus intent to make a gain
+or cause loss — a benign check-in lacks those elements. legislation
+• The EU AI Act Article 50 (transparency, applying from August 2,
+2026) requires that AI systems interacting directly with people be
+designed so persons are "informed that they are interacting with an
+AI system unless this is obvious." europa europa An indistinguishable
+voice is exactly the case where disclosure becomes mandatory rather
+than optional (because it is no longer "obvious").
+The pattern is consistent: the more indistinguishable the voice, the
+stronger the legal duty to disclose it. Designing for indistinguishability is
+legally fine; designing to conceal AI identity is what creates liability. For a
+
+cognitively impaired recipient (Ethan's originating use case), non-
+disclosure also raises the sharpest ethical and consent risk — the 404
+Media critique's core concern.
+How competitors handle it: the market
+leaders already disclose
+Vendor practice validates the compliant path and shows disclosure is not
+a market disadvantage:
+• inTouch discloses explicitly. Its founder states "in the first call... we
+clearly say this is an AI" and that they disclose "constantly" that
+"Mary is an AI," and its FAQ states "No calls to seniors ever start
+without receiving the senior's explicit consent first." mashable
+intouch This consent-gating maps directly onto the TCPA "called-party
+consent" requirement.
+• ElderVoice discloses in its FAQ ("Is a real person calling? No,
+ElderVoice is an advanced Artificial Intelligence") and introduces itself
+as a companion service "set up by you (the family member)" on the
+first call. eldervoice
+• Verocall states "We are not trying to fool anyone into thinking our
+agents are human" and even tells families to reconsider if the loved
+one cannot tell it's not human. verocall verocall
+• Joy Calls identifies itself as AI on its site but appears to rely on family
+pre-briefing ("talk to your loved one about Joy in advance") rather
+than a forced start-of-call label, while designing the voice to "sound
+and feel human." joycalls
+• CareCall and Senior Protection AI do not surface any explicit
+senior-facing AI disclosure or start-of-call script in their public
+materials — the weakest-disclosure end of the market. intouch
+The 404 Media test underscores why disclosure matters: the reporter's
+mother perceived the call as "an automated company cold call," and a
+Harvard ethicist warned AI caregiving must be approached with
+"humility, honesty." theverge ispr Caregiver-community sentiment is
+
+actively hostile to undisclosed AI ("I don't want my elderly parents
+talking to AI"). reddit Disclosure is thus both a legal hedge and a trust/
+reputation necessity.
+What this means for the build
+A compliant product is realistic in both the US and UK, and the
+compliant design is already the market-leading design.
+Concretely, the safe configuration is:
+1. Disclose AI identity at the start of every call ("Hi, this is [name],
+an AI assistant calling to check in on behalf of your family"). This is
+not yet federally mandated but is (a) proposed by the FCC
+federalregister, (b) required by Maine for voice AI in commerce
+maine, Colorado from mid-2026 justia, and California's AB 2905
+announcement structure leginfo, (c) required under the EU AI Act
+from August 2026 europa, and (d) demanded by Utah on request
+utah. One disclosure line satisfies all of them.
+2. Also state caller identity and a callback number — already
+required federally for artificial-voice calls today. cornell
+3. Obtain the elderly recipient's own consent, not just the family's,
+because the "called party" is the recipient and third-party consent is
+legally shaky unless the family member is the phone's subscriber or
+authorized agent. findlaw uscourts This is the deepest tension with
+the "family buys it" model and needs a real consent-capture step
+involving the senior.
+4. Keep call content strictly non-promotional to stay outside US
+telemarketing rules and UK PECR marketing consent. ico
+5. Handle recording transparency and health-data processing
+under UK GDPR/US state privacy rules (disclose recording; lawful
+basis for health-adjacent data). ico
+The "indistinguishable from a human" design ambition is the one
+element to walk back: build a natural, non-robotic voice, but front it with
+
+an honest disclosure and recipient consent. That is legal, ethical, and —
+per inTouch and ElderVoice — commercially normal.
+Where further research would most change the conclusion: First,
+the recipient-consent mechanics deserve a dedicated legal review
+with a TCPA attorney — specifically whether a workable consent flow can
+be built when the buyer and the called party differ, and whether the
+senior's verbal consent captured on the first AI call itself suffices (a
+chicken-and-egg problem the case law doesn't cleanly resolve). Second,
+the FCC AI-disclosure NPRM status should be re-checked close to
+launch: if it is finalized, start-of-call AI disclosure shifts from "best
+practice" to a hard federal requirement, and the exact mandated
+wording/timing would need to be matched precisely.
