@@ -1,0 +1,11 @@
+{
+  "name": "Etta — the daily call you can't always make",
+  "short_name": "Etta",
+  "icons": [
+    { "src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/assets/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ],
+  "theme_color": "#F8F1E5",
+  "background_color": "#F8F1E5",
+  "display": "standalone"
+}
