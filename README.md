@@ -23,7 +23,10 @@ consent, always. Full concept: [`business-description.md`](business-description.
 - [x] Product schema (applied to Supabase, RLS-locked to service role)
 - [x] Call pipeline edge functions (deployed; dry-run until Vapi keys are set)
 - [x] Conversation design v1
-- [ ] Vapi + Twilio + Resend accounts, secrets, cron → first test call ([runbook](docs/launch-runbook.md))
+- [x] Vapi assistant + Twilio number (imported into Vapi) + cron schedule
+- [ ] Supabase edge-function secrets → first test call ([runbook](docs/launch-runbook.md))
+- [ ] Resend account for family summary emails
+- [ ] Twilio: verify pilot phone number (trial), upgrade before real use
 - [ ] TCPA attorney sign-off on the consent flow (launch blocker)
 - [ ] Family dashboard, trend reports, billing
 

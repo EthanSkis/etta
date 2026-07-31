@@ -3,6 +3,26 @@
 The call pipeline is built and deployed. What remains are the accounts, keys,
 and one recorded consent call per senior. Work through this top to bottom.
 
+## Live state (as of 2026-07-31)
+
+Already provisioned — steps 1, 3 and 4 below are ✅ done:
+
+| Thing | Value |
+|---|---|
+| Vapi assistant "Etta" | `d7f28f40-69a4-4c85-ad22-512f39a14dc8` (claude-sonnet-5, Clara voice, webhook + secret set) |
+| Twilio number | `+1 762 239 4275` ("Etta outbound", imported into Vapi) |
+| Vapi phone number id | `bf43dc1e-9d25-400c-87ef-607a51641419` |
+| Cron | `etta-place-due-calls`, every 10 min (pg_cron job 1) |
+
+**The one remaining setup step is setting the edge-function secrets (step 2)**
+— the values live outside this repo. Until then the scheduler answers the cron
+with 401, which is safe and by design.
+
+**Twilio trial caveats:** the account is on trial, so (a) Etta can only call
+numbers you've verified (Console → Phone Numbers → Verified Caller IDs — add
+your own cell for the self-pilot), and (b) Twilio plays a short trial notice
+before each call. Upgrading the account removes both.
+
 ## How the pieces fit
 
 ```

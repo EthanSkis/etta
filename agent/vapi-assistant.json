@@ -1,13 +1,15 @@
 {
   "_readme": [
-    "Vapi assistant definition for Etta. Create it with:",
+    "Vapi assistant definition for Etta. The live assistant",
+    "d7f28f40-69a4-4c85-ad22-512f39a14dc8 was created from this config on",
+    "2026-07-31; keep this file as the source of truth and PATCH the live",
+    "assistant when it changes. To (re)create:",
     "  curl https://api.vapi.ai/assistant -H \"Authorization: Bearer $VAPI_API_KEY\" -H 'Content-Type: application/json' -d @agent/vapi-assistant.json",
-    "Before creating: (1) replace the model system message content with the full",
-    "text of agent/etta-system-prompt.md, (2) set server.secret to the same value",
-    "as the VAPI_WEBHOOK_SECRET Supabase secret, (3) pick a voice and set voiceId.",
-    "Vapi's schema evolves — if a field is rejected, check their current API docs;",
-    "the analysis schema below must stay in sync with what call-events/index.ts reads.",
-    "Remove this _readme key before POSTing if Vapi rejects unknown fields."
+    "First: (1) replace the model system message content with the full text of",
+    "agent/etta-system-prompt.md (everything after the first ---), (2) set",
+    "server.secret to the same value as the VAPI_WEBHOOK_SECRET Supabase secret.",
+    "The analysis schema below must stay in sync with what call-events/index.ts",
+    "reads. Remove this _readme key before POSTing."
   ],
   "name": "Etta",
   "firstMessage": "Hi {{preferred_name}}, it's Etta — your daily check-in companion. I should say, as always: I'm an AI assistant, not a person, calling because {{family_contact}} set this up with you. How are you doing today?",
@@ -23,8 +25,8 @@
     ]
   },
   "voice": {
-    "provider": "11labs",
-    "voiceId": "CHOOSE_A_WARM_MATURE_VOICE_ID"
+    "provider": "vapi",
+    "voiceId": "Clara"
   },
   "transcriber": {
     "provider": "deepgram",
@@ -34,10 +36,7 @@
   "maxDurationSeconds": 600,
   "silenceTimeoutSeconds": 30,
   "backgroundDenoisingEnabled": true,
-  "voicemailDetection": {
-    "provider": "twilio"
-  },
-  "voicemailMessage": "Hi {{preferred_name}}, it's Etta — sorry I missed you! Nothing to worry about; I'll try you again in a little while.",
+  "voicemailMessage": "Hi, it's Etta — sorry I missed you! Nothing to worry about; I'll try you again in a little while.",
   "server": {
     "url": "https://kkqgxojxsfqgfpzdyzjv.supabase.co/functions/v1/call-events",
     "secret": "SET_TO_SAME_VALUE_AS_VAPI_WEBHOOK_SECRET"
