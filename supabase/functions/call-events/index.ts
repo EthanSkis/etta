@@ -197,14 +197,18 @@ async function handleNoAnswer(call: any) {
   }).select("id").single();
 
   const { data: senior } = await supabase.from("seniors")
-    .select("first_name, preferred_name").eq("id", call.senior_id).maybeSingle();
+    .select("first_name, preferred_name, share_token")
+    .eq("id", call.senior_id).maybeSingle();
   const name = senior?.preferred_name || senior?.first_name || "your parent";
+  const link = senior?.share_token
+    ? `\nHistory: ${Deno.env.get("SUPABASE_URL")}/functions/v1/fam/${senior.share_token}`
+    : "";
   const sent = await sendText(
     await familyPhones(call.senior_id, { escalationOnly: true }),
-    `Etta couldn't reach ${name} today — no answer after ${MAX_ATTEMPTS} tries ` +
+    `🔴 Etta couldn't reach ${name} today — no answer after ${MAX_ATTEMPTS} tries ` +
       `over ${MAX_ATTEMPTS - 1} hours. That's often nothing (errands, a nap, the ` +
       `phone in another room), but you know ${name} best — a quick call from you ` +
-      `is the right next step. — Etta`,
+      `is the right next step.${link}\n— Etta`,
   );
   if (sent && esc) {
     await supabase.from("escalations")
@@ -225,7 +229,8 @@ async function handleCompleted(call: any, message: any) {
   );
 
   const { data: senior } = await supabase.from("seniors")
-    .select("first_name, preferred_name").eq("id", call.senior_id).maybeSingle();
+    .select("first_name, preferred_name, share_token")
+    .eq("id", call.senior_id).maybeSingle();
   const name = senior?.preferred_name || senior?.first_name || "your parent";
 
   const minutes = Math.max(1, Math.round(durationSeconds / 60));
@@ -276,27 +281,42 @@ async function handleCompleted(call: any, message: any) {
     });
   }
 
-  // The family note as a single text: chips like the site promises, then the
-  // summary, then anything to watch.
+  // The family note as a single text. The first character is the UI: a
+  // colored signal readable from the lock screen without opening anything.
+  // 🔴 is reserved for "needs attention" so it stays meaningful.
+  const signal = urgent.length > 0
+    ? "🔴"
+    : moodScore === null
+    ? "⚪"
+    : moodScore >= 4
+    ? "🟢"
+    : moodScore === 3
+    ? "🟡"
+    : "🟠";
+
   const chips: string[] = [];
-  if (moodScore) chips.push(`Mood ${moodScore}/5`);
-  if (typeof structured.ate_today === "boolean") {
-    chips.push(`Ate: ${structured.ate_today ? "yes" : "not yet"}`);
-  }
   if (typeof structured.slept_well === "boolean") {
-    chips.push(`Slept: ${structured.slept_well ? "well" : "poorly"}`);
+    chips.push(`😴 slept ${structured.slept_well ? "well" : "poorly"}`);
+  }
+  if (typeof structured.ate_today === "boolean") {
+    chips.push(`🍽️ ${structured.ate_today ? "ate" : "not eaten yet"}`);
   }
   if (typeof structured.meds_taken === "boolean") {
-    chips.push(`Meds: ${structured.meds_taken ? "taken" : "not taken"}`);
+    chips.push(`💊 ${structured.meds_taken ? "taken" : "not taken"}`);
   }
+  if (moodScore) chips.push(`Mood ${moodScore}/5`);
 
-  let body = `Etta's check-in with ${name}`;
+  const link = senior?.share_token
+    ? `${Deno.env.get("SUPABASE_URL")}/functions/v1/fam/${senior.share_token}`
+    : "";
+
+  let body = `${signal} Etta's check-in with ${name}`;
   if (moodScore) body += ` — ${MOOD_WORDS[moodScore]}`;
   body += ` (${minutes} min)`;
   if (chips.length) body += `\n${chips.join(" · ")}`;
   body += `\n\n${summaryText}`;
   if (urgent.length) {
-    body += `\n\nNeeds your attention:\n` +
+    body += `\n\n⚠️ Needs your attention:\n` +
       urgent.map((f) => `• ${flagText(f)}`).join("\n");
   }
   const watch = flags.filter((f) => !urgent.includes(f));
@@ -304,6 +324,7 @@ async function handleCompleted(call: any, message: any) {
     body += `\n\nKeeping an eye on:\n` +
       watch.map((f) => `• ${flagText(f)}`).join("\n");
   }
+  if (link) body += `\n\nFull picture: ${link}`;
   body += `\n— Etta`;
 
   const sent = await sendText(await familyPhones(call.senior_id), body);
