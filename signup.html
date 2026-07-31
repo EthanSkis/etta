@@ -31,6 +31,15 @@ transition:border-color .25s ease}
 .sq{display:none}
 .sq.show{display:block;animation:stepIn .45s ease;margin-bottom:34px}
 @keyframes stepIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.plans-pick{margin-top:30px}
+.pick-q{display:block;font-family:var(--serif);font-size:19px;font-weight:500;margin-bottom:10px}
+.pick{display:flex;align-items:flex-start;gap:11px;padding:13px 2px;
+border-bottom:1px solid var(--line);cursor:pointer}
+.pick input{margin-top:4px;accent-color:var(--terra);width:17px;height:17px;flex:none}
+.pick-body{display:block;line-height:1.4}
+.pick-body b{font-size:17px;font-weight:600}
+.pick-body small{font-size:15px;color:var(--terra-deep);margin-left:8px}
+.pick-body em{display:block;font-style:normal;font-size:13.5px;color:var(--ink-soft);margin-top:2px}
 .hp-field{position:absolute;left:-9999px;top:-9999px}
 .signup-msg{color:var(--terra-deep);font-size:14px;margin-top:10px;min-height:1.3em}
 .signup-note{font-size:13px;color:var(--ink-soft);margin-top:12px;line-height:1.55}
@@ -97,18 +106,33 @@ font-weight:600;color:var(--terra-deep);margin:14px 0 4px;text-decoration:none}
           <div class="sf-row">
             <label class="sf"><span id="lbl-tz">Where they live</span>
               <select name="timezone"></select></label>
-            <label class="sf"><span id="lbl-time">Daily call time <em>(their time)</em></span>
+            <label class="sf"><span id="lbl-time">Call time <em>(their time)</em></span>
               <select name="call_time"></select></label>
           </div>
           <label class="sf"><span id="lbl-notes">Anything Etta should know? <em>(optional)</em></span>
             <textarea name="notes" rows="3" maxlength="1000" placeholder="Loves her garden. Widowed last year. Grandkids are Ben and Lucy…"></textarea></label>
 
+          <div class="plans-pick">
+            <span class="pick-q">How often should Etta call?</span>
+            <label class="pick">
+              <input type="radio" name="plan" value="daily" checked>
+              <span class="pick-body"><b>Every day</b><small>$39/month</small>
+                <em>Daily call, weekly trends, priority escalation.</em></span>
+            </label>
+            <label class="pick">
+              <input type="radio" name="plan" value="standard">
+              <span class="pick-body"><b>Three days a week</b><small>$19/month</small>
+                <em>Monday, Wednesday, Friday.</em></span>
+            </label>
+          </div>
+
           <div class="hp-field" aria-hidden="true"><input type="text" name="website" tabindex="-1" autocomplete="off"></div>
-          <button class="btn" type="submit" style="width:100%;margin-top:32px">Set up Etta</button>
+          <button class="btn" type="submit" style="width:100%;margin-top:26px">Continue to payment</button>
           <p class="signup-msg" role="status"></p>
-          <p class="signup-note">Free during early access — no card, cancel anytime by saying so.
-          Etta always introduces herself as an AI, calls are recorded so your notes can be
-          written, and your parent can stop everything just by telling her to.</p>
+          <p class="signup-note"><b>14 days free, and you're not charged until your parent says yes.</b>
+          If they decline — or you don't finish setting up — the trial cancels itself and
+          nothing is billed. Cancel anytime, and if your parent ever tells Etta to stop,
+          the calls end and so does the billing.</p>
         </div>
       </form>
 
@@ -271,27 +295,35 @@ font-weight:600;color:var(--terra-deep);margin:14px 0 4px;text-decoration:none}
         parent_phone: form.elements.parent_phone.value,
         timezone: form.elements.timezone.value,
         call_time: form.elements.call_time.value,
+        plan: (form.querySelector('input[name="plan"]:checked') || {}).value || "daily",
         notes: form.elements.notes.value,
         website: form.elements.website.value
       })
     }).then(function (res) { return res.json().then(function (d) { return { ok: res.ok, d: d }; }); })
       .then(function (r) {
         if (!r.ok) throw new Error(r.d && r.d.error || "Something went wrong — please try again.");
-        var name = form.elements.parent_name.value.trim() || "your parent";
-        document.getElementById("done-name").textContent = name + "'s";
-        document.getElementById("done-name2").textContent = name;
-        form.hidden = true;
-        done.hidden = false;
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        window.location.href = r.d.checkout_url;
       })
       .catch(function (err) {
         msg.textContent = err.message;
-      })
-      .finally(function () {
         btn.disabled = false;
-        btn.textContent = "Set up Etta";
+        btn.textContent = "Continue to payment";
       });
   });
+
+  /* Back from Stripe: ?started=1&who=Margaret → the "now call Etta" screen. */
+  var params = new URLSearchParams(window.location.search);
+  if (params.get("started")) {
+    var who = (params.get("who") || "your parent").slice(0, 80);
+    document.getElementById("done-name").textContent = who + "'s";
+    document.getElementById("done-name2").textContent = who;
+    form.hidden = true;
+    done.hidden = false;
+  } else if (params.get("canceled")) {
+    msg.textContent = "Checkout canceled — nothing was charged. Your details are still here.";
+    steps.forEach(function (s) { s.classList.add("show"); });
+    personalize();
+  }
 })();
 </script>
 </body>

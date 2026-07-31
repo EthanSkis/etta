@@ -14,6 +14,18 @@ Already provisioned — steps 1, 3 and 4 below are ✅ done:
 | Vapi phone number id | `bf43dc1e-9d25-400c-87ef-607a51641419` |
 | Cron | `etta-place-due-calls`, every 10 min (pg_cron job 1) |
 | Summary delivery | **SMS from Etta's own number** (+1 762 239 4275) — deliberately no email and no app, on either side of the product. Test text delivered. |
+| Stripe (LIVE) | Products + prices created: Standard `price_1TzO26A8l4yd6OUzIGnqRkhB` ($19), Daily `price_1TzO27A8l4yd6OUzhi1l2T3b` ($39). Webhook endpoint `we_1TzO7NA8l4yd6OUz2KTnJvVJ`. Customer portal configured. **Needs `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` secrets before checkout works.** |
+
+### ⚠️ Two Stripe things to fix before taking real money
+
+1. **The account's public name is "funshirts.us."** That name appears on the
+   Stripe Checkout page and on customers' card statements — a family setting
+   up eldercare calls would see it and reasonably assume fraud. Change it in
+   Stripe → Settings → Business → *Public business information* (name and
+   statement descriptor) to Etta / ETTACALLS before launch.
+2. **These are live keys**, so any checkout completed on the site creates a
+   real customer with a real card. Use Stripe's test keys (and the test
+   price IDs) if you want to rehearse the flow without real cards.
 
 **The one remaining setup step is setting the edge-function secrets (step 2)**
 — the values live outside this repo. Until then the scheduler answers the cron
@@ -63,7 +75,9 @@ supabase secrets set --project-ref kkqgxojxsfqgfpzdyzjv \
   VAPI_WEBHOOK_SECRET="$(openssl rand -hex 24)" \
   TWILIO_ACCOUNT_SID="AC..." \
   TWILIO_AUTH_TOKEN="..." \
-  TWILIO_FROM_NUMBER="+17622394275"   # optional; defaults to Etta's number in code
+  TWILIO_FROM_NUMBER="+17622394275" \
+  STRIPE_SECRET_KEY="sk_live_..." \
+  STRIPE_WEBHOOK_SECRET="whsec_..."   # from the webhook endpoint, see below
 ```
 
 Until the `VAPI_*` secrets exist, `place-due-calls` runs in **dry-run**: it
@@ -128,6 +142,29 @@ The live flow (no founder in the loop):
 Why inbound: a senior-initiated call needs no prior consent to place, which
 neatly resolves the TCPA chicken-and-egg of "calling to ask permission to
 call." Confirm this reading in the attorney review (section 7).
+
+### Billing, and the promise it encodes
+
+The card is collected at signup (Stripe Checkout) but the subscription starts
+as a **14-day trial**, so the ordering is: pay-method on file → senior's own
+yes → calls → first charge. The code keeps that promise on every branch:
+
+- Senior **declines** on the setup call → subscription canceled immediately,
+  family texted, never charged (`call-events`).
+- Senior **never consents** → `customer.subscription.trial_will_end` fires and
+  the subscription is canceled before the first invoice (`stripe-webhook`).
+- Senior **revokes** later ("stop calling me") → calls stop *and* the
+  subscription is canceled in the same breath (`call-events`).
+- Subscription canceled/unpaid from Stripe's side → schedules deactivate and
+  pending calls cancel (`stripe-webhook`); `place-due-calls` re-checks billing
+  immediately before every placement, the same way it re-checks consent.
+- `past_due` deliberately keeps calling: a card that needs updating shouldn't
+  cut off someone's daily check-in. The family gets a text instead.
+
+Plans map to frequency: `standard` ($19) = Mon/Wed/Fri, `daily` ($39) = every
+day. Families manage card, plan, and cancellation through the Stripe portal,
+reached from the "Manage billing" link on their family page — no login, same
+capability-token model as the page itself.
 
 ### Manual onboarding (fallback, or non-self-serve pilots)
 

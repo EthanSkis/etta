@@ -20,6 +20,10 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const GRACE_MINUTES = 45; // place a due call up to 45 min late (cron gaps, downtime)
 const STALE_HOURS = 2;    // scheduled rows older than this are marked failed, not placed
 
+// Billing states that still get calls. past_due is deliberate: a card that
+// needs updating shouldn't cut off someone's daily check-in mid-retry.
+const PAYING_STATUSES = ["trialing", "active", "past_due"];
+
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -86,9 +90,13 @@ Deno.serve(async (req) => {
   // 1. Turn due schedules into call rows (attempt 1, once per local day).
   const { data: schedules, error: schedErr } = await supabase
     .from("call_schedules")
-    .select("id, call_time, days_of_week, senior:seniors!inner(id, status, timezone)")
+    .select(
+      "id, call_time, days_of_week, senior:seniors!inner(id, status, timezone, " +
+        "family:families!inner(subscription_status))",
+    )
     .eq("active", true)
-    .eq("seniors.status", "active");
+    .eq("seniors.status", "active")
+    .in("seniors.families.subscription_status", PAYING_STATUSES);
   if (schedErr) {
     return new Response(JSON.stringify({ error: schedErr.message }), {
       status: 500,
@@ -150,7 +158,7 @@ Deno.serve(async (req) => {
     .select(
       "id, scheduled_for, attempt_number, senior:seniors!inner(" +
         "id, status, first_name, preferred_name, phone, timezone, notes, " +
-        "family:families!inner(primary_contact_name))",
+        "family:families!inner(primary_contact_name, subscription_status))",
     )
     .eq("status", "scheduled")
     .is("provider_call_id", null)
@@ -163,13 +171,24 @@ Deno.serve(async (req) => {
     const senior = call.senior as unknown as {
       id: string; status: string; first_name: string;
       preferred_name: string | null; phone: string; timezone: string;
-      notes: string | null; family: { primary_contact_name: string };
+      notes: string | null;
+      family: { primary_contact_name: string; subscription_status: string | null };
     };
 
     // Consent re-check at the last possible moment.
     if (senior.status !== "active") {
       await supabase.from("calls")
         .update({ status: "canceled", ended_reason: "consent_not_active" })
+        .eq("id", call.id);
+      report.canceled++;
+      continue;
+    }
+
+    // Same for billing: a subscription canceled since the row was created
+    // must not result in a call.
+    if (!PAYING_STATUSES.includes(senior.family.subscription_status ?? "")) {
+      await supabase.from("calls")
+        .update({ status: "canceled", ended_reason: "subscription_inactive" })
         .eq("id", call.id);
       report.canceled++;
       continue;
