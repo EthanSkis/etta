@@ -12,9 +12,6 @@
 <style>
 .signup-card{background:var(--card);border:1px solid var(--line);border-radius:20px;
 padding:26px 22px;max-width:560px;margin:0 auto}
-.signup-card h3{font-size:15px;letter-spacing:.06em;text-transform:uppercase;
-color:var(--ink-soft);font-family:var(--sans);font-weight:700;margin:18px 0 4px}
-.signup-card h3:first-child{margin-top:0}
 .sf{display:block;margin:12px 0}
 .sf span{display:block;font-size:14px;font-weight:600;margin-bottom:5px}
 .sf span em{font-style:normal;font-weight:400;color:var(--ink-soft)}
@@ -24,6 +21,9 @@ padding:11px 13px;outline:none}
 .sf input:focus,.sf select:focus,.sf textarea:focus{border-color:var(--terra)}
 .sf-row{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
 @media(max-width:520px){.sf-row{grid-template-columns:1fr}}
+.step{display:none}
+.step.show{display:block;animation:stepIn .4s ease}
+@keyframes stepIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .hp-field{position:absolute;left:-9999px;top:-9999px}
 .signup-msg{color:var(--terra-deep);font-size:14px;margin-top:10px;min-height:1.3em}
 .signup-note{font-size:13px;color:var(--ink-soft);margin-top:12px;line-height:1.55}
@@ -58,7 +58,7 @@ font-weight:600;color:var(--terra-deep);margin:14px 0 4px;text-decoration:none}
     <div class="wrap">
       <div class="sec-kicker">Get started</div>
       <h1 class="page-title">Two minutes for you.<br>One honest yes from them.</h1>
-      <p class="sec-lede">Fill this in, then — together with your parent — call Etta from their phone. She'll introduce herself and ask for their yes. Nothing starts without it.</p>
+      <p class="sec-lede">A few small questions, one at a time. Then — together with your parent — you'll call Etta from their phone, and she'll ask for their yes. Nothing starts without it.</p>
     </div>
   </div>
 
@@ -66,34 +66,43 @@ font-weight:600;color:var(--terra-deep);margin:14px 0 4px;text-decoration:none}
     <div class="wrap">
 
       <form class="signup-card" id="signup-form" novalidate>
-        <h3>About you</h3>
-        <label class="sf"><span>Your first name</span>
-          <input type="text" name="your_name" autocomplete="given-name" maxlength="80" placeholder="Sarah"></label>
-        <label class="sf"><span>Your mobile number <em>— Etta texts you the notes here</em></span>
-          <input type="tel" name="your_phone" autocomplete="tel" maxlength="20" placeholder="(555) 201-8890"></label>
+        <div class="step show">
+          <label class="sf"><span>First — what's your first name?</span>
+            <input type="text" name="your_name" autocomplete="given-name" maxlength="80" placeholder="Sarah" autofocus></label>
+        </div>
 
-        <h3>About your parent</h3>
-        <div class="sf-row">
-          <label class="sf"><span>Their first name</span>
+        <div class="step">
+          <label class="sf"><span>Your mobile number <em>— Etta texts you the notes here</em></span>
+            <input type="tel" name="your_phone" autocomplete="tel" maxlength="20" placeholder="(555) 201-8890"></label>
+        </div>
+
+        <div class="step">
+          <label class="sf"><span>And who is Etta calling? Their first name</span>
             <input type="text" name="parent_name" maxlength="80" placeholder="Margaret"></label>
-          <label class="sf"><span>Their phone number</span>
+        </div>
+
+        <div class="step">
+          <label class="sf"><span id="lbl-parent-phone">Their phone number <em>— the phone that will ring</em></span>
             <input type="tel" name="parent_phone" maxlength="20" placeholder="(555) 314-2760"></label>
         </div>
-        <div class="sf-row">
-          <label class="sf"><span>Where they live</span>
-            <select name="timezone"></select></label>
-          <label class="sf"><span>Daily call time <em>(their time)</em></span>
-            <select name="call_time"></select></label>
-        </div>
-        <label class="sf"><span>Anything Etta should know <em>(optional)</em></span>
-          <textarea name="notes" rows="3" maxlength="1000" placeholder="Loves her garden. Widowed last year. Grandkids are Ben and Lucy…"></textarea></label>
 
-        <div class="hp-field" aria-hidden="true"><input type="text" name="website" tabindex="-1" autocomplete="off"></div>
-        <button class="btn" type="submit" style="width:100%;margin-top:14px">Set up Etta</button>
-        <p class="signup-msg" role="status"></p>
-        <p class="signup-note">Free during early access — no card, cancel anytime by saying so.
-        Etta always introduces herself as an AI, calls are recorded so your notes can be
-        written, and your parent can stop everything just by telling her to.</p>
+        <div class="step">
+          <div class="sf-row">
+            <label class="sf"><span id="lbl-tz">Where they live</span>
+              <select name="timezone"></select></label>
+            <label class="sf"><span id="lbl-time">Daily call time <em>(their time)</em></span>
+              <select name="call_time"></select></label>
+          </div>
+          <label class="sf"><span id="lbl-notes">Anything Etta should know? <em>(optional)</em></span>
+            <textarea name="notes" rows="3" maxlength="1000" placeholder="Loves her garden. Widowed last year. Grandkids are Ben and Lucy…"></textarea></label>
+
+          <div class="hp-field" aria-hidden="true"><input type="text" name="website" tabindex="-1" autocomplete="off"></div>
+          <button class="btn" type="submit" style="width:100%;margin-top:14px">Set up Etta</button>
+          <p class="signup-msg" role="status"></p>
+          <p class="signup-note">Free during early access — no card, cancel anytime by saying so.
+          Etta always introduces herself as an AI, calls are recorded so your notes can be
+          written, and your parent can stop everything just by telling her to.</p>
+        </div>
       </form>
 
       <div class="next-step" id="signup-done" hidden>
@@ -160,6 +169,7 @@ font-weight:600;color:var(--terra-deep);margin:14px 0 4px;text-decoration:none}
   var msg = form.querySelector(".signup-msg");
   var tzSel = form.elements.timezone;
   var timeSel = form.elements.call_time;
+  var steps = Array.prototype.slice.call(form.querySelectorAll(".step"));
 
   TZ.forEach(function (z) {
     var o = document.createElement("option");
@@ -184,6 +194,58 @@ font-weight:600;color:var(--terra-deep);margin:14px 0 4px;text-decoration:none}
     });
   }
   timeSel.value = "09:00";
+
+  /* ---------- one box at a time ---------- */
+  function goodName(v) { return v.trim().length >= 2; }
+  function goodPhone(v) {
+    var d = v.replace(/\D/g, "");
+    return d.length === 10 || (d.length === 11 && d.charAt(0) === "1");
+  }
+  var stepValid = [
+    function () { return goodName(form.elements.your_name.value); },
+    function () { return goodPhone(form.elements.your_phone.value); },
+    function () { return goodName(form.elements.parent_name.value); },
+    function () { return goodPhone(form.elements.parent_phone.value); }
+  ];
+
+  // Once the parent has a name, later questions use it.
+  function personalize() {
+    var n = form.elements.parent_name.value.trim();
+    if (!n) return;
+    n = n.charAt(0).toUpperCase() + n.slice(1);
+    document.getElementById("lbl-parent-phone").innerHTML =
+      n + "'s phone number <em>— the phone that will ring</em>";
+    document.getElementById("lbl-tz").textContent = "Where " + n + " lives";
+    document.getElementById("lbl-time").innerHTML =
+      "Daily call time <em>(" + n + "'s time)</em>";
+    document.getElementById("lbl-notes").innerHTML =
+      "Anything Etta should know about " + n + "? <em>(optional)</em>";
+  }
+
+  function reveal(i) {
+    if (i >= steps.length || steps[i].classList.contains("show")) return;
+    if (i === 4) personalize();
+    steps[i].classList.add("show");
+  }
+
+  steps.forEach(function (step, i) {
+    if (i >= stepValid.length) return;
+    var input = step.querySelector("input");
+    input.addEventListener("input", function () {
+      if (stepValid[i]()) reveal(i + 1);
+      if (i === 2) personalize();
+    });
+    // Enter moves forward instead of submitting a half-finished form.
+    input.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      if (stepValid[i]()) {
+        reveal(i + 1);
+        var next = steps[i + 1] && steps[i + 1].querySelector("input, select, textarea");
+        if (next) next.focus();
+      }
+    });
+  });
 
   form.addEventListener("submit", function (e) {
     e.preventDefault();
