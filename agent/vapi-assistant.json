@@ -1,0 +1,130 @@
+{
+  "_readme": [
+    "Vapi assistant definition for Etta. The live assistant",
+    "d7f28f40-69a4-4c85-ad22-512f39a14dc8 was created from this config on",
+    "2026-07-31; keep this file as the source of truth and PATCH the live",
+    "assistant when it changes. To (re)create:",
+    "  curl https://api.vapi.ai/assistant -H \"Authorization: Bearer $VAPI_API_KEY\" -H 'Content-Type: application/json' -d @agent/vapi-assistant.json",
+    "First: (1) replace the model system message content with the full text of",
+    "agent/etta-system-prompt.md (everything after the first ---), (2) set",
+    "server.secret to the same value as the VAPI_WEBHOOK_SECRET Supabase secret.",
+    "The analysis schema below must stay in sync with what call-events/index.ts",
+    "reads. Remove this _readme key before POSTing."
+  ],
+  "name": "Etta",
+  "firstMessage": "Hi {{preferred_name}}, it's Etta — your daily check-in companion. I should say, as always: I'm an AI assistant, not a person, calling because {{family_contact}} set this up with you. How are you doing today?",
+  "model": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-5",
+    "temperature": 0.6,
+    "messages": [
+      {
+        "role": "system",
+        "content": "PASTE THE FULL CONTENTS OF agent/etta-system-prompt.md HERE"
+      }
+    ]
+  },
+  "voice": {
+    "provider": "vapi",
+    "voiceId": "Clara"
+  },
+  "transcriber": {
+    "provider": "deepgram",
+    "model": "nova-3",
+    "language": "en"
+  },
+  "maxDurationSeconds": 600,
+  "silenceTimeoutSeconds": 30,
+  "backgroundDenoisingEnabled": true,
+  "voicemailMessage": "Hi, it's Etta — sorry I missed you! Nothing to worry about; I'll try you again in a little while.",
+  "server": {
+    "url": "https://kkqgxojxsfqgfpzdyzjv.supabase.co/functions/v1/call-events",
+    "secret": "SET_TO_SAME_VALUE_AS_VAPI_WEBHOOK_SECRET"
+  },
+  "serverMessages": ["end-of-call-report", "status-update"],
+  "artifactPlan": {
+    "recordingEnabled": true
+  },
+  "analysisPlan": {
+    "summaryPlan": {
+      "enabled": true,
+      "messages": [
+        {
+          "role": "system",
+          "content": "You write the after-call note that Etta sends to the family of the senior she just called. Write 2–4 warm, concrete, plain sentences addressed to the family about how their parent is doing: overall spirits, sleep, food, anything notable they said or planned, and anything worth keeping an eye on. Use the senior's name. Be honest — if the call was flat or worrying, say so gently and specifically. Never invent details that are not in the transcript. Do not mention that Etta is an AI, do not describe the mechanics of the call, and do not address the senior."
+        },
+        {
+          "role": "user",
+          "content": "Here is the transcript of the call:\n\n{{transcript}}"
+        }
+      ]
+    },
+    "structuredDataPlan": {
+      "enabled": true,
+      "messages": [
+        {
+          "role": "system",
+          "content": "Extract structured check-in data from this transcript of Etta's call with a senior. Only record what the transcript supports. When reached_senior is true, ALWAYS include mood_score (1-5), ate_today, and slept_well — infer them from the conversation; include meds_taken only if medications came up. In flags, the explanation field is named 'detail' (never 'description') and 'type' is the category (pain, appetite, sleep, mood, confusion, safety, scam, other), not the severity. revocation_requested is true ONLY if the senior clearly asked for the calls to stop altogether and confirmed it — not for grumbling, being busy, or ending one call. reached_senior is false if the call was answered by someone else, went to voicemail, or no real conversation happened. Flag severities: 'urgent' for emergencies or safety risks (chest pain, a fall, talk of self-harm, a suspected scam), 'high' for concerning changes (new pain, confusion, not eating, very low mood), 'watch' for things worth tracking (a stiff knee mentioned twice, poor sleep). JSON only."
+        },
+        {
+          "role": "user",
+          "content": "Here is the transcript of the call:\n\n{{transcript}}"
+        }
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "reached_senior": {
+            "type": "boolean",
+            "description": "True if Etta actually spoke with the senior themself."
+          },
+          "mood_score": {
+            "type": ["integer", "null"],
+            "minimum": 1,
+            "maximum": 5,
+            "description": "Overall spirits: 1 very low … 3 steady … 5 bright. Null if unreachable."
+          },
+          "ate_today": { "type": ["boolean", "null"] },
+          "slept_well": { "type": ["boolean", "null"] },
+          "meds_taken": {
+            "type": ["boolean", "null"],
+            "description": "Null if medications were not discussed."
+          },
+          "flags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Short category: pain, appetite, sleep, mood, confusion, safety, scam, other."
+                },
+                "severity": { "type": "string", "enum": ["watch", "high", "urgent"] },
+                "detail": {
+                  "type": "string",
+                  "description": "One plain sentence the family will read verbatim."
+                }
+              },
+              "required": ["type", "severity", "detail"]
+            }
+          },
+          "revocation_requested": { "type": "boolean" },
+          "revocation_detail": {
+            "type": ["string", "null"],
+            "description": "If revocation_requested, roughly what the senior said."
+          },
+          "tomorrow_topic": {
+            "type": ["string", "null"],
+            "description": "Something Etta should naturally follow up on next call, e.g. 'the doctor's appointment on Thursday'."
+          },
+          "highlights": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "1–3 nice concrete moments, for the family and for trend reports."
+          }
+        },
+        "required": ["reached_senior", "mood_score", "ate_today", "slept_well", "flags", "revocation_requested"]
+      }
+    }
+  }
+}

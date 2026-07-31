@@ -1,0 +1,236 @@
+// place-due-calls — the outbound scheduler.
+//
+// Invoked by cron every 10 minutes (see docs/launch-runbook.md). For every
+// active senior with an active schedule it checks, in the SENIOR'S OWN
+// TIMEZONE, whether their chosen call time has arrived today, creates the
+// call row (once per schedule per local day), and places the call through
+// Vapi. Also places any pending retry rows created by the call-events
+// webhook after a no-answer.
+//
+// Consent is enforced here, not just at signup: only seniors with
+// status='active' are ever called, and the status is re-checked immediately
+// before each placement so an in-call revocation stops the very next call.
+//
+// Auth: requires the X-Etta-Cron-Secret header to match CRON_SECRET.
+// Without VAPI_* secrets it runs in dry-run mode: reports what is due,
+// creates nothing, places nothing.
+
+import { createClient } from "jsr:@supabase/supabase-js@2";
+
+const GRACE_MINUTES = 45; // place a due call up to 45 min late (cron gaps, downtime)
+const STALE_HOURS = 2;    // scheduled rows older than this are marked failed, not placed
+
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+);
+
+interface LocalNow {
+  date: string;    // YYYY-MM-DD in the senior's timezone
+  minutes: number; // minutes since local midnight
+  dow: number;     // 0=Sunday … 6=Saturday
+}
+
+function localNow(timeZone: string): LocalNow {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    weekday: "short",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(new Date());
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  const dowMap: Record<string, number> = {
+    Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+  };
+  return {
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+    minutes: parseInt(get("hour"), 10) * 60 + parseInt(get("minute"), 10),
+    dow: dowMap[get("weekday")] ?? 0,
+  };
+}
+
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(":").map((n) => parseInt(n, 10));
+  return h * 60 + m;
+}
+
+Deno.serve(async (req) => {
+  const cronSecret = Deno.env.get("CRON_SECRET");
+  if (!cronSecret || req.headers.get("x-etta-cron-secret") !== cronSecret) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const vapiKey = Deno.env.get("VAPI_API_KEY");
+  const vapiAssistant = Deno.env.get("VAPI_ASSISTANT_ID");
+  const vapiPhoneNumber = Deno.env.get("VAPI_PHONE_NUMBER_ID");
+  const dryRun = !vapiKey || !vapiAssistant || !vapiPhoneNumber;
+
+  const report = {
+    dryRun,
+    schedulesChecked: 0,
+    due: [] as string[],
+    created: 0,
+    placed: 0,
+    canceled: 0,
+    staleFailed: 0,
+    errors: [] as string[],
+  };
+
+  // 1. Turn due schedules into call rows (attempt 1, once per local day).
+  const { data: schedules, error: schedErr } = await supabase
+    .from("call_schedules")
+    .select("id, call_time, days_of_week, senior:seniors!inner(id, status, timezone)")
+    .eq("active", true)
+    .eq("seniors.status", "active");
+  if (schedErr) {
+    return new Response(JSON.stringify({ error: schedErr.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  for (const sched of schedules ?? []) {
+    report.schedulesChecked++;
+    const senior = sched.senior as unknown as {
+      id: string; status: string; timezone: string;
+    };
+    const now = localNow(senior.timezone);
+    if (!(sched.days_of_week as number[]).includes(now.dow)) continue;
+
+    const callMinutes = timeToMinutes(sched.call_time as string);
+    if (now.minutes < callMinutes || now.minutes > callMinutes + GRACE_MINUTES) {
+      continue;
+    }
+    report.due.push(sched.id as string);
+    if (dryRun) continue;
+
+    const { data: existing } = await supabase
+      .from("calls")
+      .select("id")
+      .eq("schedule_id", sched.id)
+      .eq("scheduled_local_date", now.date)
+      .eq("attempt_number", 1)
+      .maybeSingle();
+    if (existing) continue;
+
+    const { error: insErr } = await supabase.from("calls").insert({
+      senior_id: senior.id,
+      schedule_id: sched.id,
+      scheduled_for: new Date().toISOString(),
+      scheduled_local_date: now.date,
+      attempt_number: 1,
+    });
+    if (insErr) {
+      // 23505 = unique violation: another tick beat us to it; fine.
+      if (!insErr.message.includes("duplicate")) {
+        report.errors.push(`insert ${sched.id}: ${insErr.message}`);
+      }
+      continue;
+    }
+    report.created++;
+  }
+
+  if (dryRun) {
+    return new Response(JSON.stringify(report), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // 2. Place every pending call row that is due (fresh ones from step 1 and
+  //    retry rows the webhook created after a no-answer).
+  const { data: pending, error: pendErr } = await supabase
+    .from("calls")
+    .select(
+      "id, scheduled_for, attempt_number, senior:seniors!inner(" +
+        "id, status, first_name, preferred_name, phone, timezone, notes, " +
+        "family:families!inner(primary_contact_name))",
+    )
+    .eq("status", "scheduled")
+    .is("provider_call_id", null)
+    .lte("scheduled_for", new Date().toISOString());
+  if (pendErr) {
+    report.errors.push(`pending query: ${pendErr.message}`);
+  }
+
+  for (const call of pending ?? []) {
+    const senior = call.senior as unknown as {
+      id: string; status: string; first_name: string;
+      preferred_name: string | null; phone: string; timezone: string;
+      notes: string | null; family: { primary_contact_name: string };
+    };
+
+    // Consent re-check at the last possible moment.
+    if (senior.status !== "active") {
+      await supabase.from("calls")
+        .update({ status: "canceled", ended_reason: "consent_not_active" })
+        .eq("id", call.id);
+      report.canceled++;
+      continue;
+    }
+
+    const ageHours =
+      (Date.now() - new Date(call.scheduled_for as string).getTime()) / 3.6e6;
+    if (ageHours > STALE_HOURS) {
+      await supabase.from("calls")
+        .update({ status: "failed", ended_reason: "stale_never_placed" })
+        .eq("id", call.id);
+      report.staleFailed++;
+      continue;
+    }
+
+    // Yesterday's "ask about X tomorrow", if the family or Etta noted one.
+    const { data: lastSummary } = await supabase
+      .from("call_summaries")
+      .select("tomorrow_topic, summary")
+      .eq("senior_id", senior.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const res = await fetch("https://api.vapi.ai/call", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${vapiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        assistantId: vapiAssistant,
+        phoneNumberId: vapiPhoneNumber,
+        customer: { number: senior.phone },
+        metadata: { call_id: call.id, senior_id: senior.id },
+        assistantOverrides: {
+          variableValues: {
+            preferred_name: senior.preferred_name || senior.first_name,
+            family_contact: senior.family.primary_contact_name,
+            senior_notes: senior.notes || "",
+            last_call_summary: lastSummary?.summary || "",
+            ask_about: lastSummary?.tomorrow_topic || "",
+            attempt_number: String(call.attempt_number),
+          },
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      report.errors.push(`vapi ${call.id}: ${res.status} ${body.slice(0, 200)}`);
+      continue; // stays 'scheduled'; retried next tick until stale
+    }
+    const vapiCall = await res.json();
+    await supabase.from("calls")
+      .update({ status: "in_progress", provider_call_id: vapiCall.id })
+      .eq("id", call.id);
+    report.placed++;
+  }
+
+  return new Response(JSON.stringify(report), {
+    headers: { "Content-Type": "application/json" },
+  });
+});
