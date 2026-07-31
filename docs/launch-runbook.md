@@ -13,16 +13,17 @@ Already provisioned — steps 1, 3 and 4 below are ✅ done:
 | Twilio number | `+1 762 239 4275` ("Etta outbound", imported into Vapi) |
 | Vapi phone number id | `bf43dc1e-9d25-400c-87ef-607a51641419` |
 | Cron | `etta-place-due-calls`, every 10 min (pg_cron job 1) |
-| Resend | Key works; test summary email delivered. Interim from-address `Etta <etta@detailvalley.com>` (already-verified domain). `ettacalls.com` needs a Resend plan upgrade (free plan = 1 domain) — do this before any real family, so notes come from the Etta domain. |
+| Summary delivery | **SMS from Etta's own number** (+1 762 239 4275) — deliberately no email and no app, on either side of the product. Test text delivered. |
 
 **The one remaining setup step is setting the edge-function secrets (step 2)**
 — the values live outside this repo. Until then the scheduler answers the cron
 with 401, which is safe and by design.
 
 **Twilio trial caveats:** the account is on trial, so (a) Etta can only call
-numbers you've verified (Console → Phone Numbers → Verified Caller IDs — add
-your own cell for the self-pilot), and (b) Twilio plays a short trial notice
-before each call. Upgrading the account removes both.
+or text numbers you've verified (Console → Phone Numbers → Verified Caller
+IDs — add your own cell for the self-pilot), and (b) Twilio plays a short
+trial notice before each call and prefixes trial texts. Upgrading the
+account removes both.
 
 ## How the pieces fit
 
@@ -35,8 +36,8 @@ cron (every 10 min)
                                                   ▼
       edge fn: call-events  ◀── Vapi end-of-call report (transcript + analysis)
         stores outcome + call_summaries
-        emails the family note (Resend)
-        no answer → retry in 30 min (×3) → escalation email to contact chain
+        texts the family note (Twilio SMS, from Etta's own number)
+        no answer → retry in 30 min (×3) → escalation text to contact chain
         "stop calling me" → consent revoked, schedules off, family told
 ```
 
@@ -49,8 +50,7 @@ from the browser key.
 | Account | For | Note |
 |---|---|---|
 | [Vapi](https://vapi.ai) | Voice agent (LLM + voice + telephony glue) | Free tier is fine for testing |
-| [Twilio](https://twilio.com) | The outbound phone number | Buy one local-feeling US number, then import it into Vapi (Vapi dashboard → Phone Numbers → Import Twilio) |
-| [Resend](https://resend.com) | Family summary emails | Verify the `ettacalls.com` domain so mail comes from `etta@ettacalls.com` |
+| [Twilio](https://twilio.com) | The outbound phone number, for both calls and summary texts | Buy one local-feeling US number, then import it into Vapi (Vapi dashboard → Phone Numbers → Import Twilio). The same number sends the SMS summaries, so the family sees one consistent Etta number. |
 
 ## 2. Set the secrets
 
@@ -61,13 +61,15 @@ supabase secrets set --project-ref kkqgxojxsfqgfpzdyzjv \
   VAPI_ASSISTANT_ID="..." \
   VAPI_PHONE_NUMBER_ID="..." \
   VAPI_WEBHOOK_SECRET="$(openssl rand -hex 24)" \
-  RESEND_API_KEY="..." \
-  SUMMARY_FROM_EMAIL="Etta <etta@ettacalls.com>"
+  TWILIO_ACCOUNT_SID="AC..." \
+  TWILIO_AUTH_TOKEN="..." \
+  TWILIO_FROM_NUMBER="+17622394275"   # optional; defaults to Etta's number in code
 ```
 
 Until the `VAPI_*` secrets exist, `place-due-calls` runs in **dry-run**: it
 reports what's due but creates and places nothing — safe to schedule the cron
-before the accounts are ready.
+before the accounts are ready. Without the `TWILIO_*` secrets, summaries are
+stored with `delivered_at` null and no text goes out.
 
 ## 3. Create the Etta assistant in Vapi
 
@@ -121,9 +123,11 @@ values ('FAMILY_ID', 'Margaret', 'Margaret', '+1XXXXXXXXXX', 'America/New_York',
         'Loves her garden; daughter Sarah visits Sundays.')
 returning id;  -- SENIOR_ID
 
--- 5c. Escalation chain / summary recipients (primary contact is included automatically)
-insert into family_members (family_id, name, relationship, email, escalation_order)
-values ('FAMILY_ID', 'Ethan', 'son', 'ethangardner298@gmail.com', 1);
+-- 5c. Escalation chain / summary recipients (primary contact is included
+-- automatically). Summaries and escalations go by TEXT, so phone is the
+-- field that matters; email is kept for account/receipt mail only.
+insert into family_members (family_id, name, relationship, phone, email, escalation_order)
+values ('FAMILY_ID', 'Ethan', 'son', '+1XXXXXXXXXX', 'ethangardner298@gmail.com', 1);
 
 -- 5d. The schedule — senior-local wall-clock time
 insert into call_schedules (senior_id, call_time, days_of_week)
@@ -167,11 +171,12 @@ The next cron tick after 9:00 senior-time places the first call.
   scheduled time, moves `scheduled → in_progress → completed`.
 - `select * from call_summaries order by created_at desc` — summary, mood,
   chips, flags.
-- The family email arrives (or `delivered_at` stays null if Resend isn't set).
+- The family text arrives (or `delivered_at` stays null if the Twilio secrets
+  aren't set).
 - Don't answer once: the retry row appears (+30 min), then again, then the
-  escalation email after the third miss.
+  escalation text after the third miss.
 - Say "please stop calling me" on a call: senior goes `revoked`, schedules
-  deactivate, pending calls cancel, family gets the revocation email. This
+  deactivate, pending calls cancel, family gets the revocation text. This
   path is the brand — test it as seriously as the happy path.
 
 ## 7. Before any *real* family: the legal gate
@@ -183,6 +188,13 @@ The next cron tick after 9:00 senior-time places the first call.
   consent states like California); keep it in every setup call verbatim.
 - Track the FCC's proposed AI-disclosure rule — Etta's first message already
   does what the proposal asks, but confirm when it finalizes.
+- **A2P 10DLC registration** (Twilio Console → Messaging → Regulatory
+  Compliance) before real families: US carriers filter unregistered
+  long-code SMS once you're off trial. Register the brand + a "customer
+  care / account notifications" campaign; summary texts to people who
+  signed up fit squarely. Family members text STOP → Twilio blocks them
+  automatically (carrier-mandated); record it and stop expecting
+  deliveries to that number.
 - Keep `consent_events` append-only forever; it is the legal record.
 
 ## Not built yet (deliberately)

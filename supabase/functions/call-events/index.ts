@@ -6,15 +6,19 @@
 // revocation ("stop calling me" ends the service before the next call is
 // ever scheduled).
 //
+// Family notifications are TEXT MESSAGES, deliberately: the senior needs no
+// app, and neither does the family — summaries arrive by SMS from Etta's own
+// number. Requires TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN secrets; without
+// them, summaries are stored with delivered_at null and can be sent later.
+//
 // Auth: Vapi sends the assistant's server secret in the X-Vapi-Secret
-// header; must match VAPI_WEBHOOK_SECRET. Summary email goes out through
-// Resend when RESEND_API_KEY is set; otherwise summaries are stored with
-// delivered_at null and can be sent later.
+// header; must match VAPI_WEBHOOK_SECRET.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const MAX_ATTEMPTS = 3;        // 1 scheduled call + 2 retries
 const RETRY_DELAY_MINUTES = 30;
+const DEFAULT_FROM_NUMBER = "+17622394275"; // "Etta outbound" — same number Etta calls from
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -43,21 +47,32 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-async function sendEmail(to: string[], subject: string, text: string): Promise<boolean> {
-  const key = Deno.env.get("RESEND_API_KEY");
-  if (!key || to.length === 0) return false;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from: Deno.env.get("SUMMARY_FROM_EMAIL") ?? "Etta <hello@ettacalls.com>",
-      to,
-      subject,
-      text,
-    }),
-  });
-  if (!res.ok) console.error("resend failed:", res.status, await res.text());
-  return res.ok;
+// Sends one SMS per recipient. True only if every send succeeded.
+async function sendText(to: string[], body: string): Promise<boolean> {
+  const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
+  const token = Deno.env.get("TWILIO_AUTH_TOKEN");
+  const from = Deno.env.get("TWILIO_FROM_NUMBER") ?? DEFAULT_FROM_NUMBER;
+  if (!sid || !token || to.length === 0) return false;
+
+  let allOk = true;
+  for (const number of to) {
+    const res = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: "Basic " + btoa(`${sid}:${token}`),
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ From: from, To: number, Body: body }),
+      },
+    );
+    if (!res.ok) {
+      console.error("twilio sms failed:", number, res.status, await res.text());
+      allOk = false;
+    }
+  }
+  return allOk;
 }
 
 // deno-lint-ignore no-explicit-any
@@ -77,29 +92,29 @@ async function findCall(message: any) {
   return null;
 }
 
-async function familyEmails(
+async function familyPhones(
   seniorId: string,
   opts: { escalationOnly?: boolean } = {},
 ): Promise<string[]> {
   const { data: senior } = await supabase.from("seniors")
-    .select("family_id, family:families!inner(primary_contact_email)")
+    .select("family_id, family:families!inner(primary_contact_phone)")
     .eq("id", seniorId).maybeSingle();
   if (!senior) return [];
 
   let q = supabase.from("family_members")
-    .select("email, receives_summaries, escalation_order")
+    .select("phone, receives_summaries, escalation_order")
     .eq("family_id", senior.family_id)
-    .not("email", "is", null);
+    .not("phone", "is", null);
   q = opts.escalationOnly
     ? q.not("escalation_order", "is", null)
     : q.eq("receives_summaries", true);
   const { data: members } = await q;
 
-  const emails = (members ?? []).map((m) => m.email as string);
-  const primary = (senior.family as unknown as { primary_contact_email: string })
-    .primary_contact_email;
-  if (primary && !emails.includes(primary)) emails.unshift(primary);
-  return emails;
+  const phones = (members ?? []).map((m) => m.phone as string);
+  const primary = (senior.family as unknown as { primary_contact_phone: string | null })
+    .primary_contact_phone;
+  if (primary && !phones.includes(primary)) phones.unshift(primary);
+  return phones;
 }
 
 function classifyStatus(endedReason: string, durationSeconds: number): string {
@@ -141,14 +156,13 @@ async function handleRevocation(call: any, structured: any) {
   const { data: senior } = await supabase.from("seniors")
     .select("first_name, preferred_name").eq("id", call.senior_id).maybeSingle();
   const name = senior?.preferred_name || senior?.first_name || "your parent";
-  const sent = await sendEmail(
-    await familyEmails(call.senior_id),
-    `Etta update: ${name} asked to pause the calls`,
-    `Hi,\n\nOn today's call, ${name} asked Etta to stop calling — and Etta honored ` +
-      `that right away, as promised. No more calls will be placed.\n\n` +
-      `This might be a passing mood or a real preference; a gentle conversation is ` +
-      `usually the best next step. If ${name} would like the calls again, it only ` +
-      `takes a fresh yes from them — just reply to this email.\n\n— Etta`,
+  const sent = await sendText(
+    await familyPhones(call.senior_id),
+    `Etta update: on today's call, ${name} asked Etta to stop calling — and Etta ` +
+      `honored that right away, as promised. No more calls will be placed. ` +
+      `It might be a passing mood or a real preference; a gentle conversation is ` +
+      `usually the best next step. If ${name} wants the calls again, it just takes ` +
+      `a fresh yes from them. — Etta`,
   );
   if (sent && esc) {
     await supabase.from("escalations")
@@ -174,7 +188,7 @@ async function handleNoAnswer(call: any) {
     return;
   }
 
-  // Retries exhausted: open an escalation and tell the contact chain.
+  // Retries exhausted: open an escalation and text the contact chain.
   const { data: esc } = await supabase.from("escalations").insert({
     senior_id: call.senior_id,
     call_id: call.id,
@@ -185,15 +199,12 @@ async function handleNoAnswer(call: any) {
   const { data: senior } = await supabase.from("seniors")
     .select("first_name, preferred_name").eq("id", call.senior_id).maybeSingle();
   const name = senior?.preferred_name || senior?.first_name || "your parent";
-  const sent = await sendEmail(
-    await familyEmails(call.senior_id, { escalationOnly: true }),
-    `Etta couldn't reach ${name} today`,
-    `Hi,\n\nEtta tried ${name} ${MAX_ATTEMPTS} times today and the call wasn't ` +
-      `answered. That's often nothing — errands, a nap, the phone left in another ` +
-      `room — but you know ${name} best, and this is the moment Etta hands over ` +
-      `to you.\n\nA quick call from you is the right next step. If you learn ` +
-      `anything Etta should know (a hospital stay, travel, a new number), just ` +
-      `reply to this email.\n\n— Etta`,
+  const sent = await sendText(
+    await familyPhones(call.senior_id, { escalationOnly: true }),
+    `Etta couldn't reach ${name} today — no answer after ${MAX_ATTEMPTS} tries ` +
+      `over ${MAX_ATTEMPTS - 1} hours. That's often nothing (errands, a nap, the ` +
+      `phone in another room), but you know ${name} best — a quick call from you ` +
+      `is the right next step. — Etta`,
   );
   if (sent && esc) {
     await supabase.from("escalations")
@@ -250,7 +261,7 @@ async function handleCompleted(call: any, message: any) {
 
   if (structured.revocation_requested === true) {
     await handleRevocation(call, structured);
-    return; // revocation email replaces the summary email today
+    return; // revocation text replaces the summary text today
   }
 
   const urgent = flags.filter((f) =>
@@ -265,41 +276,37 @@ async function handleCompleted(call: any, message: any) {
     });
   }
 
-  // The family note: warm, short, chips like the site promises.
+  // The family note as a single text: chips like the site promises, then the
+  // summary, then anything to watch.
   const chips: string[] = [];
-  if (moodScore) chips.push(`Mood · ${moodScore}/5 (${MOOD_WORDS[moodScore]})`);
+  if (moodScore) chips.push(`Mood ${moodScore}/5`);
   if (typeof structured.ate_today === "boolean") {
-    chips.push(`Ate · ${structured.ate_today ? "Yes" : "Not yet"}`);
+    chips.push(`Ate: ${structured.ate_today ? "yes" : "not yet"}`);
   }
   if (typeof structured.slept_well === "boolean") {
-    chips.push(`Slept · ${structured.slept_well ? "Well" : "Poorly"}`);
+    chips.push(`Slept: ${structured.slept_well ? "well" : "poorly"}`);
   }
   if (typeof structured.meds_taken === "boolean") {
-    chips.push(`Meds · ${structured.meds_taken ? "Taken" : "Not taken"}`);
+    chips.push(`Meds: ${structured.meds_taken ? "taken" : "not taken"}`);
   }
 
-  let body = `${summaryText}\n\n`;
-  if (chips.length) body += chips.join("   ") + "\n\n";
+  let body = `Etta's check-in with ${name}`;
+  if (moodScore) body += ` — ${MOOD_WORDS[moodScore]}`;
+  body += ` (${minutes} min)`;
+  if (chips.length) body += `\n${chips.join(" · ")}`;
+  body += `\n\n${summaryText}`;
   if (urgent.length) {
-    body += `Worth your attention:\n` +
-      urgent.map((f) => `  • ${flagText(f)}`).join("\n") + "\n\n";
+    body += `\n\nNeeds your attention:\n` +
+      urgent.map((f) => `• ${flagText(f)}`).join("\n");
   }
   const watch = flags.filter((f) => !urgent.includes(f));
   if (watch.length) {
-    body += `Keeping an eye on:\n` +
-      watch.map((f) => `  • ${flagText(f)}`).join("\n") + "\n\n";
+    body += `\n\nKeeping an eye on:\n` +
+      watch.map((f) => `• ${flagText(f)}`).join("\n");
   }
-  body += `Call lasted about ${minutes} minute${minutes === 1 ? "" : "s"}.\n\n` +
-    `Want Etta to bring something up tomorrow? Just reply to this email.\n\n— Etta`;
+  body += `\n— Etta`;
 
-  const moodWord = moodScore ? MOOD_WORDS[moodScore] : "checked in";
-  const sent = await sendEmail(
-    await familyEmails(call.senior_id),
-    urgent.length > 0
-      ? `Etta's check-in with ${name} — something worth your attention`
-      : `Etta's check-in with ${name} — ${moodWord}`,
-    `Hi,\n\n${body}`,
-  );
+  const sent = await sendText(await familyPhones(call.senior_id), body);
   if (sent && summaryRow) {
     await supabase.from("call_summaries")
       .update({ delivered_at: new Date().toISOString() })
