@@ -107,6 +107,7 @@ details .card{border-radius:0 0 12px 12px;border-top:none;margin-top:0}
 .mins{color:var(--ink-soft);font-size:12px}
 footer{margin-top:26px;color:var(--ink-soft);font-size:12.5px;line-height:1.6}
 footer b{color:var(--ink)}
+.manage{color:var(--ink-soft);font-size:13.5px}
 </style></head><body>${body}</body></html>`,
     {
       status,
@@ -277,6 +278,7 @@ ${earlier.map((day) => `<details><summary><span class="mood-pill" style="${
       ? `background:${moodColor(day.mood, day.urgent)}`
       : "border:2px dashed var(--terra)"
   }"></span>${prettyDate(day.date)}${day.completed && day.mood ? ` — ${MOOD_WORDS[day.mood]}` : day.completed ? "" : " — no answer"}<span class="spacer"></span>▾</summary>${dayCard(day, false)}</details>`).join("")}
+<p style="text-align:center;margin:22px 0 0"><a class="manage" href="/functions/v1/billing/${token}">Manage billing</a></p>
 <footer><b>Private to your family.</b> Anyone with this exact link can view this page —
 that's what makes it work without logins or apps. Keep it in the family; to get a
 fresh link (and retire this one), reply to Etta's number.<br><br>

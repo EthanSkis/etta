@@ -124,6 +124,36 @@ async function familyPhones(
   return phones;
 }
 
+// Cancel a family's subscription immediately. Called when the senior declines
+// consent or revokes it: the product's promise is that you never keep paying
+// for calls your parent doesn't want. Idempotent — Stripe 404s are fine.
+async function cancelSubscription(familyId: string, reason: string) {
+  const key = Deno.env.get("STRIPE_SECRET_KEY");
+  if (!key) return;
+  const { data: family } = await supabase.from("families")
+    .select("stripe_subscription_id, subscription_status")
+    .eq("id", familyId).maybeSingle();
+  const subId = family?.stripe_subscription_id;
+  if (!subId || ["canceled", "incomplete_expired"].includes(family?.subscription_status ?? "")) {
+    return;
+  }
+  const res = await fetch(`https://api.stripe.com/v1/subscriptions/${subId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${key}` },
+  });
+  if (!res.ok) {
+    console.error("subscription cancel failed:", subId, res.status, await res.text());
+    return;
+  }
+  await supabase.from("families")
+    .update({ subscription_status: "canceled" }).eq("id", familyId);
+  await supabase.from("billing_events").insert({
+    family_id: familyId,
+    type: "etta.subscription_canceled",
+    detail: { reason, subscription: subId },
+  });
+}
+
 // "09:00:00" → "9 in the morning", "12:30:00" → "12:30 in the afternoon"
 function timeSpeech(t: string): string {
   const [hs, ms] = t.split(":");
@@ -177,12 +207,15 @@ async function handleRevocation(call: any, structured: any) {
   }).select("id").single();
 
   const { data: senior } = await supabase.from("seniors")
-    .select("first_name, preferred_name").eq("id", call.senior_id).maybeSingle();
+    .select("first_name, preferred_name, family_id")
+    .eq("id", call.senior_id).maybeSingle();
   const name = senior?.preferred_name || senior?.first_name || "your parent";
+  if (senior?.family_id) await cancelSubscription(senior.family_id, "senior_revoked_consent");
   const sent = await sendText(
     await familyPhones(call.senior_id),
     `Etta update: on today's call, ${name} asked Etta to stop calling — and Etta ` +
-      `honored that right away, as promised. No more calls will be placed. ` +
+      `honored that right away, as promised. No more calls will be placed, and ` +
+      `your subscription is canceled so you won't be billed again. ` +
       `It might be a passing mood or a real preference; a gentle conversation is ` +
       `usually the best next step. If ${name} wants the calls again, it just takes ` +
       `a fresh yes from them. — Etta`,
@@ -427,7 +460,7 @@ async function handleInbound(message: any) {
   const caller = message?.call?.customer?.number ?? "";
   const { data: senior } = await supabase.from("seniors")
     .select(
-      "id, first_name, preferred_name, status, share_token, timezone, " +
+      "id, family_id, first_name, preferred_name, status, share_token, timezone, " +
         "schedules:call_schedules(call_time, active)",
     )
     .eq("phone", caller)
@@ -485,16 +518,18 @@ async function handleInbound(message: any) {
     const link = `${Deno.env.get("SUPABASE_URL")}/functions/v1/fam/${senior.share_token}`;
     await sendText(
       await familyPhones(senior.id),
-      `🟢 ${name} just said yes to Etta! Daily check-ins start tomorrow around ` +
+      `🟢 ${name} just said yes to Etta! Check-ins start tomorrow around ` +
         `${speech}. You'll get a note here after each call — and the full ` +
         `picture any time: ${link}\n— Etta`,
     );
   } else if (structured.consent_declined === true) {
+    await cancelSubscription(senior.family_id, "senior_declined_consent");
     await sendText(
       await familyPhones(senior.id),
-      `Etta update: ${name} called and decided not to start the daily ` +
-        `check-ins — and that's completely okay; nothing will happen. If they ` +
-        `change their mind, just call Etta together again from their phone. — Etta`,
+      `Etta update: ${name} decided not to start the check-in calls — and that's ` +
+        `completely okay; nothing will happen and you haven't been charged. ` +
+        `Your subscription is canceled. If they change their mind, just call ` +
+        `Etta together again from their phone. — Etta`,
     );
   } else {
     await sendText(

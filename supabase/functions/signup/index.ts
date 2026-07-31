@@ -1,18 +1,27 @@
 // signup — the public endpoint behind ettacalls.com/signup.html.
 //
-// Creates the family + senior + daily schedule in ONE step, with the senior
-// in pending_consent: no call is ever placed from this form alone. The
-// consent step is the senior's own inbound call to Etta's number (routed by
-// call-events' assistant-request handler), which is what flips them active.
+// Creates the family + senior + schedule with the senior in pending_consent,
+// then hands back a Stripe Checkout URL. No call can be placed by this form:
+// calls need (a) the senior's own recorded yes on their inbound setup call
+// and (b) a live subscription. The card is collected up front but the
+// subscription starts as a 14-day trial, and it is canceled without a charge
+// if the senior declines or never consents.
 //
 // Public + unauthenticated by design; defenses are a honeypot field, strict
-// validation, tight length caps, and a duplicate-number check. Nothing here
-// can trigger an outbound call.
+// validation, tight length caps, and a duplicate-number check.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const ETTA_NUMBER_DISPLAY = "(762) 239-4275";
 const ETTA_NUMBER_E164 = "+17622394275";
+const SITE = "https://www.ettacalls.com";
+const TRIAL_DAYS = 14;
+
+const PLANS: Record<string, { price: string; days: number[] }> = {
+  // Standard: three calls a week (Mon/Wed/Fri). Daily: every day.
+  standard: { price: "price_1TzO26A8l4yd6OUzIGnqRkhB", days: [1, 3, 5] },
+  daily: { price: "price_1TzO27A8l4yd6OUzhi1l2T3b", days: [0, 1, 2, 3, 4, 5, 6] },
+};
 
 const ALLOWED_TIMEZONES = new Set([
   "America/New_York", "America/Chicago", "America/Denver", "America/Phoenix",
@@ -51,25 +60,21 @@ function cleanName(raw: unknown): string | null {
   return s;
 }
 
-async function notifyFamily(phone: string, body: string) {
-  const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
-  const token = Deno.env.get("TWILIO_AUTH_TOKEN");
-  const from = Deno.env.get("TWILIO_FROM_NUMBER") ?? ETTA_NUMBER_E164;
-  if (!sid || !token) return;
-  const res = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: "Basic " + btoa(`${sid}:${token}`),
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ From: from, To: phone, Body: body }),
+async function stripe(path: string, form: Record<string, string>): Promise<Record<string, unknown>> {
+  const res = await fetch(`https://api.stripe.com/v1/${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${Deno.env.get("STRIPE_SECRET_KEY")}`,
+      "Content-Type": "application/x-www-form-urlencoded",
     },
-  );
-  // Best-effort: on a Twilio trial this fails for unverified numbers, and
-  // the signup success screen carries the same instructions anyway.
-  if (!res.ok) console.error("signup text failed:", res.status, await res.text());
+    body: new URLSearchParams(form),
+  });
+  const body = await res.json();
+  if (!res.ok) {
+    console.error("stripe error:", path, res.status, JSON.stringify(body).slice(0, 300));
+    throw new Error(body?.error?.message ?? "payment setup failed");
+  }
+  return body;
 }
 
 Deno.serve(async (req) => {
@@ -84,7 +89,7 @@ Deno.serve(async (req) => {
   }
 
   // Honeypot: bots fill the hidden field — pretend it worked.
-  if (body.website) return json({ ok: true, etta_number: ETTA_NUMBER_DISPLAY });
+  if (body.website) return json({ ok: true, checkout_url: SITE });
 
   const yourName = cleanName(body.your_name);
   const parentName = cleanName(body.parent_name);
@@ -92,7 +97,9 @@ Deno.serve(async (req) => {
   const parentPhone = normalizePhone(String(body.parent_phone ?? ""));
   const timezone = String(body.timezone ?? "");
   const callTime = String(body.call_time ?? "");
+  const planKey = String(body.plan ?? "daily");
   const notes = String(body.notes ?? "").trim().slice(0, 1000) || null;
+  const plan = PLANS[planKey];
 
   if (!yourName || !parentName) return json({ error: "Please give both names." }, 400);
   if (!yourPhone) return json({ error: "Your mobile number doesn't look right." }, 400);
@@ -107,16 +114,26 @@ Deno.serve(async (req) => {
   if (!/^(0[6-9]|1[0-9]|20):(00|30)$/.test(callTime)) {
     return json({ error: "Please pick a call time." }, 400);
   }
+  if (!plan) return json({ error: "Please pick a plan." }, 400);
 
-  // One Etta per phone line.
+  // One Etta per phone line — but an abandoned checkout shouldn't lock the
+  // number forever, so an unsubscribed pending signup is replaced.
   const { data: existing } = await supabase.from("seniors")
-    .select("id, status").eq("phone", parentPhone)
-    .in("status", ["pending_consent", "active"]).limit(1);
-  if (existing && existing.length > 0) {
-    return json({
-      error: "That number is already set up with Etta. If that's unexpected, " +
-        "text Etta's number and we'll sort it out.",
-    }, 409);
+    .select("id, status, family_id, family:families!inner(subscription_status)")
+    .eq("phone", parentPhone)
+    .in("status", ["pending_consent", "active"]).limit(1).maybeSingle();
+  if (existing) {
+    const status =
+      (existing.family as unknown as { subscription_status: string | null }).subscription_status;
+    const abandoned = existing.status === "pending_consent" &&
+      (status === null || ["canceled", "incomplete", "incomplete_expired"].includes(status));
+    if (!abandoned) {
+      return json({
+        error: "That number is already set up with Etta. If that's unexpected, " +
+          "text Etta's number and we'll sort it out.",
+      }, 409);
+    }
+    await supabase.from("families").delete().eq("id", existing.family_id);
   }
 
   const { data: family, error: famErr } = await supabase.from("families")
@@ -125,6 +142,7 @@ Deno.serve(async (req) => {
       primary_contact_name: yourName,
       primary_contact_phone: yourPhone,
       status: "self_serve",
+      plan: planKey,
     }).select("id").single();
   if (famErr || !family) {
     console.error("family insert failed:", famErr?.message);
@@ -150,16 +168,43 @@ Deno.serve(async (req) => {
   await supabase.from("call_schedules").insert({
     senior_id: senior.id,
     call_time: `${callTime}:00`,
-    days_of_week: [0, 1, 2, 3, 4, 5, 6],
+    days_of_week: plan.days,
   });
 
-  await notifyFamily(
-    yourPhone,
-    `Etta here — you're all set up for ${parentName}. One step left, and it's ` +
-      `${parentName}'s: together, from ${parentName}'s phone, call me at ` +
-      `${ETTA_NUMBER_DISPLAY}. I'll introduce myself and ask for their yes — ` +
-      `nothing starts without it. — Etta`,
-  );
+  try {
+    const customer = await stripe("customers", {
+      name: yourName,
+      phone: yourPhone,
+      "metadata[family_id]": family.id,
+      "metadata[senior_name]": parentName,
+    });
+    await supabase.from("families")
+      .update({ stripe_customer_id: customer.id as string }).eq("id", family.id);
 
-  return json({ ok: true, etta_number: ETTA_NUMBER_DISPLAY });
+    const session = await stripe("checkout/sessions", {
+      mode: "subscription",
+      customer: customer.id as string,
+      "line_items[0][price]": plan.price,
+      "line_items[0][quantity]": "1",
+      "subscription_data[trial_period_days]": String(TRIAL_DAYS),
+      "subscription_data[metadata][family_id]": family.id,
+      "metadata[family_id]": family.id,
+      allow_promotion_codes: "true",
+      success_url: `${SITE}/signup.html?started=1&who=${encodeURIComponent(parentName)}`,
+      cancel_url: `${SITE}/signup.html?canceled=1`,
+    });
+
+    return json({
+      ok: true,
+      checkout_url: session.url as string,
+      etta_number: ETTA_NUMBER_DISPLAY,
+    });
+  } catch (err) {
+    // Payment setup failed: don't leave a half-made family behind.
+    await supabase.from("families").delete().eq("id", family.id);
+    return json({
+      error: "We couldn't start checkout — please try again, or text " +
+        `${ETTA_NUMBER_E164} and we'll help.`,
+    }, 502);
+  }
 });

@@ -11,7 +11,10 @@ consent, always. Full concept: [`business-description.md`](business-description.
 | `index.html`, `signup.html`, `how-it-works.html`, `pledge.html`, `pricing.html`, `faq.html`, `styles.css`, `app.js` | The site, with live self-serve signup (no waitlist): family fills the form, then the senior calls Etta from their own phone to give their recorded yes |
 | `supabase/migrations/` | Product database schema: families, seniors, append-only consent log, schedules, calls, summaries, escalations |
 | `supabase/functions/place-due-calls/` | Scheduler (cron, every 10 min): timezone-aware "whose check-in time is it?", consent check, places calls via Vapi |
-| `supabase/functions/call-events/` | Vapi webhook: call outcomes, family summary texts (SMS from Etta's own number — no app, no inbox), no-answer retries + escalation, immediate in-call revocation |
+| `supabase/functions/call-events/` | Vapi webhook: call outcomes, family summary texts (SMS from Etta's own number — no app, no inbox), no-answer retries + escalation, inbound consent calls, immediate in-call revocation |
+| `supabase/functions/signup/` | Public signup: creates family/senior/schedule (pending consent) and returns a Stripe Checkout URL |
+| `supabase/functions/fam/` | The family's no-login web view — magic link, 14-day mood strip, per-call cards |
+| `supabase/functions/stripe-webhook/`, `supabase/functions/billing/` | Subscription sync (and the no-consent-no-charge rules), plus the customer-portal redirect |
 | `agent/etta-system-prompt.md` | Etta's conversation design — disclosure, tone, question bank, safety, scam protection, revocation |
 | `agent/vapi-assistant.json` | The Vapi assistant definition, incl. structured post-call analysis schema |
 | `docs/launch-runbook.md` | Step-by-step from here to the first real call (accounts, secrets, cron, consent script, legal gate) |
@@ -26,10 +29,15 @@ consent, always. Full concept: [`business-description.md`](business-description.
 - [x] Vapi assistant + Twilio number (imported into Vapi) + cron schedule
 - [x] First live pilot call completed end to end (2026-07-31)
 - [x] Summary delivery by SMS from Etta's own number (no email, no app — either side)
-- [ ] `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` Supabase secrets so summary texts send automatically
+- [x] Self-serve signup + senior-initiated recorded consent call
+- [x] Family web view (magic link, no login) with 14-day mood trend
+- [x] Stripe subscriptions: $19 (3×/week) and $39 (daily), 14-day trial, no charge
+      until the senior consents, auto-cancel on decline or revocation
+- [ ] `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` Supabase secrets so checkout works
+- [ ] Rename the Stripe account's public/statement name off "funshirts.us"
 - [ ] Twilio: upgrade off trial + A2P 10DLC registration before real families
 - [ ] TCPA attorney sign-off on the consent flow (launch blocker)
-- [ ] Family dashboard, trend reports, billing
+- [ ] Weekly trend reports, signup rate limiting, reply-to-rotate links
 
 ## Principles that are load-bearing
 
