@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Set up Etta — two minutes, no app</title>
+<meta name="description" content="Set up Etta's daily check-in calls for your parent in two minutes. No app, no account. Nothing starts until your parent personally says yes to Etta on a recorded call.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Karla:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+.signup-card{background:var(--card);border:1px solid var(--line);border-radius:20px;
+padding:26px 22px;max-width:560px;margin:0 auto}
+.signup-card h3{font-size:15px;letter-spacing:.06em;text-transform:uppercase;
+color:var(--ink-soft);font-family:var(--sans);font-weight:700;margin:18px 0 4px}
+.signup-card h3:first-child{margin-top:0}
+.sf{display:block;margin:12px 0}
+.sf span{display:block;font-size:14px;font-weight:600;margin-bottom:5px}
+.sf span em{font-style:normal;font-weight:400;color:var(--ink-soft)}
+.sf input,.sf select,.sf textarea{width:100%;font:inherit;color:var(--ink);
+background:var(--paper);border:1px solid var(--line);border-radius:12px;
+padding:11px 13px;outline:none}
+.sf input:focus,.sf select:focus,.sf textarea:focus{border-color:var(--terra)}
+.sf-row{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+@media(max-width:520px){.sf-row{grid-template-columns:1fr}}
+.hp-field{position:absolute;left:-9999px;top:-9999px}
+.signup-msg{color:var(--terra-deep);font-size:14px;margin-top:10px;min-height:1.3em}
+.signup-note{font-size:13px;color:var(--ink-soft);margin-top:12px;line-height:1.55}
+.next-step{max-width:560px;margin:0 auto;background:var(--card);
+border:2px solid rgba(46,32,20,.3);border-radius:20px;padding:30px 22px;text-align:center}
+.next-step .bignum{display:inline-block;font-family:var(--serif);font-size:34px;
+font-weight:600;color:var(--terra-deep);margin:14px 0 4px;text-decoration:none}
+.next-step ol{text-align:left;margin:18px auto 0;max-width:26em;padding-left:22px}
+.next-step ol li{margin:8px 0}
+</style>
+</head>
+<body>
+
+<header>
+  <nav class="nav">
+    <a class="logo" href="index.html">etta<span>.</span></a>
+    <div class="nav-links">
+      <a href="how-it-works.html">How it works</a>
+      <a href="pledge.html">Our pledge</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="faq.html">FAQ</a>
+    </div>
+    <div class="nav-actions">
+      <a class="btn small" href="signup.html">Get started</a>
+      <button class="menu-btn" type="button" aria-label="Menu" aria-expanded="false"><i></i><i></i><i></i></button>
+    </div>
+  </nav>
+</header>
+
+<main>
+  <div class="page-hero center">
+    <div class="wrap">
+      <div class="sec-kicker">Get started</div>
+      <h1 class="page-title">Two minutes for you.<br>One honest yes from them.</h1>
+      <p class="sec-lede">Fill this in, then — together with your parent — call Etta from their phone. She'll introduce herself and ask for their yes. Nothing starts without it.</p>
+    </div>
+  </div>
+
+  <section style="padding-top:8px">
+    <div class="wrap">
+
+      <form class="signup-card" id="signup-form" novalidate>
+        <h3>About you</h3>
+        <label class="sf"><span>Your first name</span>
+          <input type="text" name="your_name" autocomplete="given-name" maxlength="80" placeholder="Sarah"></label>
+        <label class="sf"><span>Your mobile number <em>— Etta texts you the notes here</em></span>
+          <input type="tel" name="your_phone" autocomplete="tel" maxlength="20" placeholder="(555) 201-8890"></label>
+
+        <h3>About your parent</h3>
+        <div class="sf-row">
+          <label class="sf"><span>Their first name</span>
+            <input type="text" name="parent_name" maxlength="80" placeholder="Margaret"></label>
+          <label class="sf"><span>Their phone number</span>
+            <input type="tel" name="parent_phone" maxlength="20" placeholder="(555) 314-2760"></label>
+        </div>
+        <div class="sf-row">
+          <label class="sf"><span>Where they live</span>
+            <select name="timezone"></select></label>
+          <label class="sf"><span>Daily call time <em>(their time)</em></span>
+            <select name="call_time"></select></label>
+        </div>
+        <label class="sf"><span>Anything Etta should know <em>(optional)</em></span>
+          <textarea name="notes" rows="3" maxlength="1000" placeholder="Loves her garden. Widowed last year. Grandkids are Ben and Lucy…"></textarea></label>
+
+        <div class="hp-field" aria-hidden="true"><input type="text" name="website" tabindex="-1" autocomplete="off"></div>
+        <button class="btn" type="submit" style="width:100%;margin-top:14px">Set up Etta</button>
+        <p class="signup-msg" role="status"></p>
+        <p class="signup-note">Free during early access — no card, cancel anytime by saying so.
+        Etta always introduces herself as an AI, calls are recorded so your notes can be
+        written, and your parent can stop everything just by telling her to.</p>
+      </form>
+
+      <div class="next-step" id="signup-done" hidden>
+        <div class="sec-kicker">One step left — and it's <b id="done-name">their</b> step</div>
+        <h2 style="margin-top:6px">Now call Etta, together.</h2>
+        <a class="bignum" id="etta-tel" href="tel:+17622394275">(762) 239-4275</a>
+        <p class="sec-lede" style="margin-top:6px">From <b><span id="done-name2">your parent</span>'s phone</b>, with you beside them or on the line.</p>
+        <ol>
+          <li>Etta answers, says hello, and explains she's an AI — plainly.</li>
+          <li>She describes the daily call and asks <b>your parent</b> for their yes, in their own voice, on a recorded line.</li>
+          <li>If they say yes: first call tomorrow at the time you chose, and you'll get a text after every conversation. If they say no — nothing happens, ever. That's the deal.</li>
+        </ol>
+        <p class="signup-note">No rush — this works whenever you're next together or on the phone with them.</p>
+      </div>
+
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <a class="logo" href="index.html">etta<span>.</span></a>
+        <p style="margin-top:10px;max-width:34em">The daily call you can't always make — honest about being AI, welcome because of it.</p>
+      </div>
+      <div class="foot-links">
+        <a href="how-it-works.html">How it works</a>
+        <a href="pledge.html">Our pledge</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="faq.html">FAQ</a>
+        <a href="mailto:hello@ettacalls.com">hello@ettacalls.com</a>
+      </div>
+    </div>
+    <div class="draft-note">
+      &#x26A0;&#xFE0E; Etta is in early access. Nothing here is medical advice or an emergency service.
+    </div>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+<script>
+(function () {
+  "use strict";
+  var SIGNUP_URL = "https://kkqgxojxsfqgfpzdyzjv.supabase.co/functions/v1/signup";
+
+  var TZ = [
+    ["Eastern time", "America/New_York"],
+    ["Central time", "America/Chicago"],
+    ["Mountain time", "America/Denver"],
+    ["Arizona", "America/Phoenix"],
+    ["Pacific time", "America/Los_Angeles"],
+    ["Alaska", "America/Anchorage"],
+    ["Hawaii", "Pacific/Honolulu"]
+  ];
+  var TZ_ALIASES = {
+    "America/Detroit": "America/New_York", "America/Indiana/Indianapolis": "America/New_York",
+    "America/Kentucky/Louisville": "America/New_York", "America/Menominee": "America/Chicago",
+    "America/Boise": "America/Denver", "America/Adak": "Pacific/Honolulu"
+  };
+
+  var form = document.getElementById("signup-form");
+  var done = document.getElementById("signup-done");
+  var msg = form.querySelector(".signup-msg");
+  var tzSel = form.elements.timezone;
+  var timeSel = form.elements.call_time;
+
+  TZ.forEach(function (z) {
+    var o = document.createElement("option");
+    o.value = z[1]; o.textContent = z[0];
+    tzSel.appendChild(o);
+  });
+  try {
+    var mine = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    mine = TZ_ALIASES[mine] || mine;
+    if (TZ.some(function (z) { return z[1] === mine; })) tzSel.value = mine;
+  } catch (e) { /* default stands */ }
+
+  for (var h = 7; h <= 19; h++) {
+    ["00", "30"].forEach(function (m) {
+      if (h >= 12 && m === "30") return; // half-hours only in the morning
+      var v = (h < 10 ? "0" + h : "" + h) + ":" + m;
+      var h12 = h % 12 || 12;
+      var label = h12 + ":" + m + (h < 12 ? " in the morning" : h < 17 ? " in the afternoon" : " in the evening");
+      var o = document.createElement("option");
+      o.value = v; o.textContent = label;
+      timeSel.appendChild(o);
+    });
+  }
+  timeSel.value = "09:00";
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    msg.textContent = "";
+    var btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = "Setting up…";
+
+    fetch(SIGNUP_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        your_name: form.elements.your_name.value,
+        your_phone: form.elements.your_phone.value,
+        parent_name: form.elements.parent_name.value,
+        parent_phone: form.elements.parent_phone.value,
+        timezone: form.elements.timezone.value,
+        call_time: form.elements.call_time.value,
+        notes: form.elements.notes.value,
+        website: form.elements.website.value
+      })
+    }).then(function (res) { return res.json().then(function (d) { return { ok: res.ok, d: d }; }); })
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.d && r.d.error || "Something went wrong — please try again.");
+        var name = form.elements.parent_name.value.trim() || "your parent";
+        document.getElementById("done-name").textContent = name + "'s";
+        document.getElementById("done-name2").textContent = name;
+        form.hidden = true;
+        done.hidden = false;
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      })
+      .catch(function (err) {
+        msg.textContent = err.message;
+      })
+      .finally(function () {
+        btn.disabled = false;
+        btn.textContent = "Set up Etta";
+      });
+  });
+})();
+</script>
+</body>
+</html>

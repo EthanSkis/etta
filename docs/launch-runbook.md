@@ -106,10 +106,30 @@ select cron.schedule(
 (The secret lives inside the cron job definition in your own database —
 acceptable for now; move it to Vault when convenient.)
 
-## 5. Onboard a pilot senior (yourself first!)
+## 5. Onboarding is self-serve now
 
-**First pilot should be you or a friendly relative** — run a week of calls on
-someone who signed up to find bugs before any real family relies on it.
+The live flow (no founder in the loop):
+
+1. Family fills **ettacalls.com/signup.html** → `signup` edge function creates
+   family + senior (`pending_consent`) + daily schedule. No call can happen yet.
+2. The senior — usually with family beside them — **calls Etta's number from
+   their own phone**. The number's inbound webhook (`assistant-request` in
+   `call-events`) recognizes the caller and routes them to the **setup
+   assistant** (`agent/etta-setup-prompt.md`), which explains everything and
+   asks for their personal yes on the recorded line.
+3. A clear yes → consent_events row (with the recording URL as evidence),
+   senior flips `active`, family gets the 🟢 text with their family-page link,
+   and the next morning's cron places the first daily call. A no → nothing
+   starts, family is told kindly. Unclear → nothing starts, family is told.
+4. Callers with unknown numbers get a polite generic Etta; active seniors who
+   call the number back get the daily-companion Etta with their context (and
+   anything they say — including "stop calling me" — is honored as usual).
+
+Why inbound: a senior-initiated call needs no prior consent to place, which
+neatly resolves the TCPA chicken-and-egg of "calling to ask permission to
+call." Confirm this reading in the attorney review (section 7).
+
+### Manual onboarding (fallback, or non-self-serve pilots)
 
 ```sql
 -- 5a. The family (the buyer side)

@@ -20,6 +20,13 @@ const MAX_ATTEMPTS = 3;        // 1 scheduled call + 2 retries
 const RETRY_DELAY_MINUTES = 30;
 const DEFAULT_FROM_NUMBER = "+17622394275"; // "Etta outbound" — same number Etta calls from
 
+// Inbound routing: pending seniors (and unknown callers) get the setup
+// assistant; active seniors get the daily-companion assistant with context.
+const SETUP_ASSISTANT_ID =
+  Deno.env.get("VAPI_SETUP_ASSISTANT_ID") ?? "0089b42e-799e-42c5-878a-2478387ae1de";
+const MAIN_ASSISTANT_ID =
+  Deno.env.get("VAPI_ASSISTANT_ID") ?? "d7f28f40-69a4-4c85-ad22-512f39a14dc8";
+
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -115,6 +122,22 @@ async function familyPhones(
     .primary_contact_phone;
   if (primary && !phones.includes(primary)) phones.unshift(primary);
   return phones;
+}
+
+// "09:00:00" → "9 in the morning", "12:30:00" → "12:30 in the afternoon"
+function timeSpeech(t: string): string {
+  const [hs, ms] = t.split(":");
+  const h24 = parseInt(hs, 10);
+  const m = parseInt(ms, 10);
+  const part = h24 < 12 ? "in the morning" : h24 < 17 ? "in the afternoon" : "in the evening";
+  const h = h24 % 12 || 12;
+  return m === 0 ? `${h} ${part}` : `${h}:${String(m).padStart(2, "0")} ${part}`;
+}
+
+function localDate(timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
 }
 
 function classifyStatus(endedReason: string, durationSeconds: number): string {
@@ -335,6 +358,154 @@ async function handleCompleted(call: any, message: any) {
   }
 }
 
+// Someone dialed Etta's number: decide which Etta answers, with what context.
+// deno-lint-ignore no-explicit-any
+async function handleAssistantRequest(message: any): Promise<Response> {
+  const caller = message?.call?.customer?.number ?? "";
+  const { data: senior } = await supabase.from("seniors")
+    .select(
+      "id, first_name, preferred_name, status, notes, " +
+        "family:families!inner(primary_contact_name), " +
+        "schedules:call_schedules(call_time, active)",
+    )
+    .eq("phone", caller)
+    .in("status", ["pending_consent", "active"])
+    .limit(1)
+    .maybeSingle();
+
+  if (!senior) {
+    return json({
+      assistantId: SETUP_ASSISTANT_ID,
+      assistantOverrides: {
+        variableValues: {
+          caller_known: "no", parent_name: "", family_contact: "", call_time_speech: "",
+        },
+      },
+    });
+  }
+
+  const name = senior.preferred_name || senior.first_name;
+  const familyContact =
+    (senior.family as unknown as { primary_contact_name: string }).primary_contact_name;
+  const sched = (senior.schedules as { call_time: string; active: boolean }[] ?? [])
+    .find((s) => s.active);
+  const speech = sched ? timeSpeech(sched.call_time) : "the time your family chose";
+
+  if (senior.status === "active") {
+    return json({
+      assistantId: MAIN_ASSISTANT_ID,
+      assistantOverrides: {
+        variableValues: {
+          preferred_name: name,
+          family_contact: familyContact,
+          senior_notes: senior.notes ?? "",
+          last_call_summary: "",
+          ask_about: "",
+          attempt_number: "1",
+        },
+      },
+    });
+  }
+
+  return json({
+    assistantId: SETUP_ASSISTANT_ID,
+    assistantOverrides: {
+      variableValues: {
+        caller_known: "yes",
+        parent_name: name,
+        family_contact: familyContact,
+        call_time_speech: speech,
+      },
+    },
+  });
+}
+
+// End of an inbound call (no pre-existing calls row). For a pending senior
+// this is THE consent moment; for an active senior it's a welcome callback.
+// deno-lint-ignore no-explicit-any
+async function handleInbound(message: any) {
+  const caller = message?.call?.customer?.number ?? "";
+  const { data: senior } = await supabase.from("seniors")
+    .select(
+      "id, first_name, preferred_name, status, share_token, timezone, " +
+        "schedules:call_schedules(call_time, active)",
+    )
+    .eq("phone", caller)
+    .in("status", ["pending_consent", "active"])
+    .limit(1)
+    .maybeSingle();
+  if (!senior) return; // unknown caller: nothing to store, by design
+
+  const durationSeconds = Math.round(
+    message.durationSeconds ??
+      (message.endedAt && message.startedAt
+        ? (new Date(message.endedAt).getTime() - new Date(message.startedAt).getTime()) / 1000
+        : 0),
+  );
+  const recordingUrl = message.artifact?.recordingUrl ?? message.recordingUrl ?? null;
+
+  const { data: callRow } = await supabase.from("calls").insert({
+    senior_id: senior.id,
+    scheduled_for: message.startedAt ?? new Date().toISOString(),
+    scheduled_local_date: localDate(senior.timezone),
+    status: "completed",
+    provider_call_id: message.call?.id ?? null,
+    started_at: message.startedAt ?? null,
+    ended_at: message.endedAt ?? new Date().toISOString(),
+    duration_seconds: durationSeconds || null,
+    ended_reason: `inbound:${message.endedReason ?? "ended"}`,
+    transcript: message.artifact?.transcript ?? message.transcript ?? null,
+    recording_url: recordingUrl,
+  }).select("id").single();
+
+  const name = senior.preferred_name || senior.first_name;
+
+  if (senior.status === "active") {
+    // A callback from an active senior: run the normal post-call processing
+    // so anything they said (including "stop calling me") is honored.
+    if (callRow) await handleCompleted({ id: callRow.id, senior_id: senior.id }, message);
+    return;
+  }
+
+  // Pending consent: the setup assistant's analysis decides what happened.
+  const structured = message?.analysis?.structuredData ?? {};
+  if (structured.consent_given === true) {
+    await supabase.from("consent_events").insert({
+      senior_id: senior.id,
+      event: "granted",
+      method: "senior_inbound_setup_call",
+      recording_url: recordingUrl,
+      notes: structured.consent_quote ??
+        message?.analysis?.summary ?? "Senior agreed on recorded inbound setup call.",
+    });
+    await supabase.from("seniors").update({ status: "active" }).eq("id", senior.id);
+    const sched = (senior.schedules as { call_time: string; active: boolean }[] ?? [])
+      .find((s) => s.active);
+    const speech = sched ? timeSpeech(sched.call_time) : "the time you chose";
+    const link = `${Deno.env.get("SUPABASE_URL")}/functions/v1/fam/${senior.share_token}`;
+    await sendText(
+      await familyPhones(senior.id),
+      `🟢 ${name} just said yes to Etta! Daily check-ins start tomorrow around ` +
+        `${speech}. You'll get a note here after each call — and the full ` +
+        `picture any time: ${link}\n— Etta`,
+    );
+  } else if (structured.consent_declined === true) {
+    await sendText(
+      await familyPhones(senior.id),
+      `Etta update: ${name} called and decided not to start the daily ` +
+        `check-ins — and that's completely okay; nothing will happen. If they ` +
+        `change their mind, just call Etta together again from their phone. — Etta`,
+    );
+  } else {
+    await sendText(
+      await familyPhones(senior.id),
+      `Etta update: someone called from ${name}'s phone, but it didn't end in ` +
+        `a clear yes from ${name}, so nothing starts yet. When you're ready, ` +
+        `call Etta together again from their phone. — Etta`,
+    );
+  }
+}
+
 Deno.serve(async (req) => {
   const secret = Deno.env.get("VAPI_WEBHOOK_SECRET");
   if (!secret || req.headers.get("x-vapi-secret") !== secret) {
@@ -349,6 +520,10 @@ Deno.serve(async (req) => {
   }
   const message = payload?.message;
   if (!message?.type) return json({ ok: true, ignored: "no message type" });
+
+  if (message.type === "assistant-request") {
+    return await handleAssistantRequest(message);
+  }
 
   if (message.type === "status-update") {
     if (message.status === "in-progress") {
@@ -367,7 +542,15 @@ Deno.serve(async (req) => {
   }
 
   const call = await findCall(message);
-  if (!call) return json({ error: "call not found" }, 404);
+  if (!call) {
+    // Inbound calls have no pre-created row: setup/consent calls and
+    // callbacks from active seniors land here.
+    if ((message.call?.type ?? "").toLowerCase().includes("inbound")) {
+      await handleInbound(message);
+      return json({ ok: true, inbound: true });
+    }
+    return json({ error: "call not found" }, 404);
+  }
 
   const durationSeconds = Math.round(
     message.durationSeconds ??
