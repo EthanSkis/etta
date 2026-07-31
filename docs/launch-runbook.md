@@ -13,6 +13,7 @@ Already provisioned — steps 1, 3 and 4 below are ✅ done:
 | Twilio number | `+1 762 239 4275` ("Etta outbound", imported into Vapi) |
 | Vapi phone number id | `bf43dc1e-9d25-400c-87ef-607a51641419` |
 | Cron | `etta-place-due-calls`, every 10 min (pg_cron job 1) |
+| Resend | Key works; test summary email delivered. Interim from-address `Etta <etta@detailvalley.com>` (already-verified domain). `ettacalls.com` needs a Resend plan upgrade (free plan = 1 domain) — do this before any real family, so notes come from the Etta domain. |
 
 **The one remaining setup step is setting the edge-function secrets (step 2)**
 — the values live outside this repo. Until then the scheduler answers the cron
