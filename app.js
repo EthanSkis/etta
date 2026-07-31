@@ -67,6 +67,11 @@
 
   function openModal(trigger) {
     lastTrigger = trigger || null;
+    // Reserve the scrollbar's width before overflow:hidden removes it,
+    // so the page doesn't shift sideways. Measured, not hard-coded: it's
+    // 0 on overlay-scrollbar platforms (macOS, mobile) and short pages.
+    var scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.paddingRight = scrollbarWidth > 0 ? scrollbarWidth + "px" : "";
     overlay.classList.add("open");
     document.body.classList.add("modal-open");
     window.setTimeout(function () {
@@ -79,6 +84,7 @@
   function closeModal() {
     overlay.classList.remove("open");
     document.body.classList.remove("modal-open");
+    document.body.style.paddingRight = "";
     if (lastTrigger && lastTrigger.focus) lastTrigger.focus();
     lastTrigger = null;
   }
