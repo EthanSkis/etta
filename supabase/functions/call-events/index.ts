@@ -29,6 +29,11 @@ interface Flag {
   type?: string;
   severity?: string;
   detail?: string;
+  description?: string; // analysis models sometimes use this despite the schema
+}
+
+function flagText(f: Flag): string {
+  return f.detail ?? f.description ?? f.type ?? "unspecified concern";
 }
 
 function json(body: unknown, status = 200): Response {
@@ -256,7 +261,7 @@ async function handleCompleted(call: any, message: any) {
       senior_id: call.senior_id,
       call_id: call.id,
       reason: "health_flag",
-      detail: urgent.map((f) => `${f.type ?? "concern"}: ${f.detail ?? ""}`).join("; "),
+      detail: urgent.map((f) => `${f.type ?? "concern"}: ${flagText(f)}`).join("; "),
     });
   }
 
@@ -277,12 +282,12 @@ async function handleCompleted(call: any, message: any) {
   if (chips.length) body += chips.join("   ") + "\n\n";
   if (urgent.length) {
     body += `Worth your attention:\n` +
-      urgent.map((f) => `  • ${f.detail ?? f.type}`).join("\n") + "\n\n";
+      urgent.map((f) => `  • ${flagText(f)}`).join("\n") + "\n\n";
   }
   const watch = flags.filter((f) => !urgent.includes(f));
   if (watch.length) {
     body += `Keeping an eye on:\n` +
-      watch.map((f) => `  • ${f.detail ?? f.type}`).join("\n") + "\n\n";
+      watch.map((f) => `  • ${flagText(f)}`).join("\n") + "\n\n";
   }
   body += `Call lasted about ${minutes} minute${minutes === 1 ? "" : "s"}.\n\n` +
     `Want Etta to bring something up tomorrow? Just reply to this email.\n\n— Etta`;

@@ -64,7 +64,7 @@
       "messages": [
         {
           "role": "system",
-          "content": "Extract structured check-in data from this transcript of Etta's call with a senior. Only record what the transcript supports: use null when a topic was not discussed or was unclear. revocation_requested is true ONLY if the senior clearly asked for the calls to stop altogether and confirmed it — not for grumbling, being busy, or ending one call. reached_senior is false if the call was answered by someone else, went to voicemail, or no real conversation happened. Flags: severity 'urgent' for emergencies or safety risks (chest pain, a fall, talk of self-harm, a suspected scam), 'high' for concerning changes (new pain, confusion, not eating, very low mood), 'watch' for things worth tracking (a stiff knee mentioned twice, poor sleep)."
+          "content": "Extract structured check-in data from this transcript of Etta's call with a senior. Only record what the transcript supports. When reached_senior is true, ALWAYS include mood_score (1-5), ate_today, and slept_well — infer them from the conversation; include meds_taken only if medications came up. In flags, the explanation field is named 'detail' (never 'description') and 'type' is the category (pain, appetite, sleep, mood, confusion, safety, scam, other), not the severity. revocation_requested is true ONLY if the senior clearly asked for the calls to stop altogether and confirmed it — not for grumbling, being busy, or ending one call. reached_senior is false if the call was answered by someone else, went to voicemail, or no real conversation happened. Flag severities: 'urgent' for emergencies or safety risks (chest pain, a fall, talk of self-harm, a suspected scam), 'high' for concerning changes (new pain, confusion, not eating, very low mood), 'watch' for things worth tracking (a stiff knee mentioned twice, poor sleep). JSON only."
         },
         {
           "role": "user",
@@ -123,7 +123,7 @@
             "description": "1–3 nice concrete moments, for the family and for trend reports."
           }
         },
-        "required": ["reached_senior", "flags", "revocation_requested"]
+        "required": ["reached_senior", "mood_score", "ate_today", "slept_well", "flags", "revocation_requested"]
       }
     }
   }
