@@ -1,14 +1,18 @@
 // fam — the family's no-login web view ("the link is the login").
 //
-// Every summary text ends with /functions/v1/fam/<share_token>. The token is
-// a per-senior capability: long, random, rotatable (see the share_token
-// migration). The page is server-rendered from the database, so the product
-// tables stay service-role only; this function is the single, deliberately
-// narrow public window: first names, the last 14 days, nothing else.
+// Reached at ettacalls.com/f/<share_token>, which proxies here: Supabase
+// rewrites text/html to text/plain on *.supabase.co, so this page is only
+// ever served to families through our own domain.
+//
+// The token is a per-senior capability: long, random, rotatable. The page is
+// server-rendered from the database, so the product tables stay service-role
+// only; this function is the single, deliberately narrow public window:
+// first names, the last 14 days, nothing else.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const DAYS = 14;
+const SITE = "https://www.ettacalls.com";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -39,76 +43,161 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-// Mood → brand color. Red is reserved for "needs attention".
-function moodColor(mood: number | null, urgent: boolean): string {
-  if (urgent) return "#BC5127";           // terra — attention
-  if (mood === null) return "transparent";
-  if (mood >= 4) return "#77875F";        // sage — good
-  if (mood === 3) return "#D9A441";       // gold — steady
-  return "#BC5127";                       // terra — low
+// The summary model sometimes emphasises a title or a phrase with markdown.
+// Escape first, then render the emphasis, so *The Hunger Games* reads as a
+// title rather than as stray punctuation.
+function prose(s: string): string {
+  return esc(s)
+    .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s.,;:!?)]|$)/g, "$1<em>$2</em>")
+    .replace(/(^|[\s(])_([^_\n]+)_(?=[\s.,;:!?)]|$)/g, "$1<em>$2</em>");
 }
+
+// Mood → brand colour. Terracotta is reserved for low days and attention, so
+// it keeps meaning something when it appears.
+function moodColor(mood: number | null, urgent: boolean): string {
+  if (urgent) return "#BC5127";
+  if (mood === null) return "#B9AD9C";
+  if (mood >= 4) return "#77875F";
+  if (mood === 3) return "#D9A441";
+  return "#BC5127";
+}
+
+// One stroke weight, one corner style, drawn to sit on the text baseline.
+const ICONS = `<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+<symbol id="i-meal" viewBox="0 0 24 24"><path d="M4 4v6a3 3 0 0 0 3 3v7M7 4v5M10 4v5M20 4c-1.7 1.2-2.5 3-2.5 5.5S18.3 13 20 13v7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-pill" viewBox="0 0 24 24"><rect x="2.8" y="8.6" width="18.4" height="7.6" rx="3.8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 8.8v6.6" stroke="currentColor" stroke-width="1.6"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4.5 21 19H3l9-14.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 10v4M12 16.6v.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+<symbol id="i-watch" viewBox="0 0 24 24"><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+<symbol id="i-phone-off" viewBox="0 0 24 24"><path d="M4.5 5.2c-.6 6.6 7.7 14.9 14.3 14.3l1.4-3-4-1.8-1.9 1.9a15 15 0 0 1-6.9-6.9l1.9-1.9L7.5 3.8 4.5 5.2Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 3l18 18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+</svg>`;
 
 function html(status: number, body: string, title = "Etta"): Response {
   return new Response(
     `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#F8F1E5">
 <title>${esc(title)}</title>
+<link rel="icon" href="${SITE}/favicon.ico" sizes="any">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--paper:#F8F1E5;--ink:#2E2014;--ink-soft:#6E5B45;--terra:#BC5127;--sage:#77875F;
---gold:#D9A441;--card:#FFFDF7;--line:rgba(46,32,20,.16)}
+:root{
+  --paper:#F8F1E5; --paper-deep:#F0E5D0; --ink:#2E2014; --ink-soft:#6E5B45;
+  --terra:#BC5127; --terra-deep:#8E3A18; --sage:#77875F; --gold:#D9A441;
+  --card:#FFFDF7; --line:rgba(46,32,20,.14); --line-firm:rgba(46,32,20,.26);
+  --serif:"Fraunces",Georgia,serif; --sans:"Karla",system-ui,sans-serif;
+}
 *{box-sizing:border-box;margin:0}
-body{background:var(--paper);color:var(--ink);font:16px/1.55 "Karla",sans-serif;
-padding:20px 16px 48px;max-width:560px;margin:0 auto}
-h1,h2,h3{font-family:"Fraunces",Georgia,serif;font-weight:500;line-height:1.2}
-.logo{font-family:"Fraunces",Georgia,serif;font-size:26px;font-weight:600}
+body{
+  background:var(--paper); color:var(--ink);
+  font:16px/1.6 var(--sans); -webkit-font-smoothing:antialiased;
+  max-width:600px; margin:0 auto; padding:26px 18px 56px; position:relative;
+}
+/* Faint paper grain — depth without decoration competing with the data. */
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.5;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.045'/%3E%3C/svg%3E");
+}
+body>*{position:relative;z-index:1}
+h1,h2,h3{font-family:var(--serif);font-weight:500;line-height:1.15}
+
+/* ---------- masthead ---------- */
+.mast{display:flex;align-items:baseline;justify-content:space-between;
+  padding-bottom:12px;border-bottom:1.5px solid var(--ink);margin-bottom:20px}
+.logo{font-family:var(--serif);font-size:23px;font-weight:600;letter-spacing:-.01em;
+  color:var(--ink);text-decoration:none}
 .logo span{color:var(--terra)}
-header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px}
-h1{font-size:26px;margin:14px 0 2px}
-.sub{color:var(--ink-soft);font-size:14px;margin-bottom:18px}
-.banner{background:#F6E3D8;border:1px solid var(--terra);border-radius:12px;
-padding:12px 14px;font-size:15px;margin-bottom:18px}
-.strip{background:var(--card);border:1px solid var(--line);border-radius:16px;
-padding:14px 12px 10px;margin-bottom:18px}
-.strip-title{font-size:12px;letter-spacing:.08em;text-transform:uppercase;
-color:var(--ink-soft);margin:0 4px 10px}
-.dots{display:flex;justify-content:space-between;gap:2px}
-.day{display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;min-width:0}
-.dot{width:17px;height:17px;border-radius:50%;border:2px solid var(--line)}
-.dot.filled{border-color:transparent}
-.dot.missed{border-style:dashed;border-color:var(--terra)}
-.dow{font-size:10px;color:var(--ink-soft)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;
-padding:16px;margin-bottom:12px}
-.card.latest{border-width:2px;border-color:rgba(46,32,20,.3)}
-.when{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-soft);
-margin-bottom:8px}
-.when b{color:var(--ink);font-size:15px}
-.mood-pill{display:inline-block;width:11px;height:11px;border-radius:50%}
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 2px}
-.chip{background:var(--paper);border:1px solid var(--line);border-radius:999px;
-padding:3px 10px;font-size:13px}
-.chip.warn{background:#F6E3D8;border-color:var(--terra);color:#7A3417}
-.flags{margin-top:10px;font-size:14px}
-.flags li{margin:4px 0 4px 18px}
-.flags .urgent{color:#7A3417;font-weight:600}
-.summary{font-size:15px;margin-top:6px}
-details{margin-bottom:10px}
-details summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;
-background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;
-font-size:14px}
+.mast .kick{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+h1{font-size:31px;letter-spacing:-.015em;margin-bottom:5px}
+.sub{color:var(--ink-soft);font-size:14.5px;max-width:34em}
+
+.banner{display:flex;gap:11px;background:#F6E3D8;border:1px solid var(--terra);
+  border-radius:3px;padding:13px 15px;font-size:14.5px;margin-top:18px}
+.banner svg{width:19px;height:19px;flex:none;color:var(--terra-deep);margin-top:1px}
+
+/* ---------- panels ---------- */
+.panel{background:var(--card);border:1px solid var(--line);border-radius:4px;
+  padding:18px;margin-top:16px;box-shadow:0 1px 0 rgba(46,32,20,.05),0 8px 22px -18px rgba(46,32,20,.5);
+  animation:rise .5s cubic-bezier(.2,.7,.3,1) both}
+.panel.accent{border-left:3px solid var(--ink)}
+@keyframes rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+.eyebrow{display:flex;align-items:center;gap:9px;font-size:10.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-soft);margin-bottom:14px}
+.eyebrow::after{content:"";flex:1;height:1px;background:var(--line)}
+.panel-date{font-family:var(--serif);font-size:19px;font-weight:500}
+.panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:2px}
+.mins{font-size:12px;color:var(--ink-soft);white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* ---------- mood meter ---------- */
+.meter{margin:14px 0 4px}
+.meter svg{display:block;width:100%;height:auto}
+.meter-ends{display:flex;justify-content:space-between;font-size:11px;
+  color:var(--ink-soft);margin-top:2px}
+.meter-word{font-family:var(--serif);font-size:17px;font-weight:500;margin-bottom:9px}
+.meter-word b{font-weight:600}
+
+/* ---------- data tiles ---------- */
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:16px}
+.tile{border:1px solid var(--line);border-radius:3px;padding:11px 10px;background:var(--paper);
+  display:flex;flex-direction:column;gap:5px;min-width:0}
+.tile svg{width:19px;height:19px;color:var(--ink-soft)}
+.tile .v{font-family:var(--serif);font-size:15.5px;font-weight:500;line-height:1.15}
+.tile .k{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft)}
+.tile.neg{background:#F9EDE6;border-color:rgba(188,81,39,.4)}
+.tile.neg svg,.tile.neg .v{color:var(--terra-deep)}
+
+/* ---------- prose ---------- */
+.prose{font-size:15.5px;line-height:1.65;margin-top:16px}
+.prose::first-line{letter-spacing:.005em}
+
+/* ---------- flags ---------- */
+.note{display:flex;gap:11px;border:1px solid var(--line);border-left-width:3px;
+  border-radius:3px;padding:12px 13px;margin-top:10px;font-size:14.5px;line-height:1.55}
+.note svg{width:18px;height:18px;flex:none;margin-top:2px}
+.note .lab{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  margin-bottom:3px;font-weight:700}
+.note.urgent{background:#F9EDE6;border-color:rgba(188,81,39,.45);border-left-color:var(--terra)}
+.note.urgent svg,.note.urgent .lab{color:var(--terra-deep)}
+.note.watch{background:var(--paper);border-left-color:var(--gold)}
+.note.watch svg,.note.watch .lab{color:#96701D}
+.note-group{margin-top:18px}
+.note-group .eyebrow{margin-bottom:8px}
+.note-group .note:first-of-type{margin-top:0}
+
+/* ---------- 14-day chart ---------- */
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.legend{display:flex;gap:15px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-soft);margin-top:11px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+
+/* ---------- earlier ---------- */
+h2.section{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);
+  font-family:var(--sans);font-weight:700;margin:30px 0 4px}
+details{border-bottom:1px solid var(--line)}
+details summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;
+  padding:13px 2px;font-size:15px}
 details summary::-webkit-details-marker{display:none}
-details[open] summary{border-radius:12px 12px 0 0}
-details .card{border-radius:0 0 12px 12px;border-top:none;margin-top:0}
-.spacer{flex:1}
-.mins{color:var(--ink-soft);font-size:12px}
-footer{margin-top:26px;color:var(--ink-soft);font-size:12.5px;line-height:1.6}
-footer b{color:var(--ink)}
-.manage{color:var(--ink-soft);font-size:13.5px}
-</style></head><body>${body}</body></html>`,
+details summary .chev{margin-left:auto;color:var(--ink-soft);font-size:12px;transition:transform .2s}
+details[open] summary .chev{transform:rotate(180deg)}
+details .panel{margin:0 0 14px;box-shadow:none;animation:none}
+.pip{width:10px;height:10px;border-radius:50%;flex:none}
+.pip.miss{background:none;border:1.5px dashed var(--terra)}
+.when-word{color:var(--ink-soft);font-size:13.5px}
+
+/* ---------- footer ---------- */
+.manage{display:inline-flex;align-items:center;gap:7px;margin-top:24px;
+  font-size:14px;color:var(--ink);text-decoration:none;
+  border:1px solid var(--line-firm);border-radius:3px;padding:10px 16px;background:var(--card)}
+.manage:hover{background:var(--paper-deep)}
+.foot{margin-top:26px;padding-top:18px;border-top:1px solid var(--line);
+  color:var(--ink-soft);font-size:12.5px;line-height:1.65}
+.foot b{color:var(--ink)}
+.center{text-align:center}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style></head><body>${ICONS}${body}</body></html>`,
     {
       status,
       headers: {
@@ -123,12 +212,89 @@ footer b{color:var(--ink)}
 function notFound(): Response {
   return html(
     404,
-    `<header><div class="logo">etta<span>.</span></div></header>
+    `<div class="mast"><a class="logo" href="${SITE}">etta<span>.</span></a></div>
 <h1>This link isn't active.</h1>
 <p class="sub">It may have been rotated for privacy. Check the most recent
 text from Etta for the current link, or reply to Etta's number and we'll help.</p>`,
     "Etta — link not active",
   );
+}
+
+// The mood meter: a measured scale rather than a progress bar, so a 2 reads as
+// a position on a range and not as "20% complete".
+function moodMeter(mood: number, urgent: boolean): string {
+  const colour = moodColor(mood, urgent);
+  const x = 10 + (mood - 1) * 70;
+  let ticks = "";
+  for (let i = 0; i < 5; i++) {
+    const tx = 10 + i * 70;
+    ticks += `<line x1="${tx}" y1="26" x2="${tx}" y2="32" stroke="rgba(46,32,20,.28)" stroke-width="1"/>`;
+  }
+  return `<div class="meter">
+<svg viewBox="0 0 300 42" role="img" aria-label="Mood ${mood} out of 5 — ${MOOD_WORDS[mood]}">
+  <line x1="10" y1="20" x2="290" y2="20" stroke="rgba(46,32,20,.16)" stroke-width="5" stroke-linecap="round"/>
+  <line x1="10" y1="20" x2="${x}" y2="20" stroke="${colour}" stroke-width="5" stroke-linecap="round"/>
+  ${ticks}
+  <circle cx="${x}" cy="20" r="11" fill="${colour}"/>
+  <circle cx="${x}" cy="20" r="11" fill="none" stroke="#FFFDF7" stroke-width="2.5"/>
+  <text x="${x}" y="24.5" text-anchor="middle" font-family="Karla,sans-serif"
+        font-size="11.5" font-weight="700" fill="#FFFDF7">${mood}</text>
+</svg>
+<div class="meter-ends"><span>a hard day</span><span>bright</span></div>
+</div>`;
+}
+
+// Fourteen days of mood as an actual chart: height is the rating, so a slide
+// downward is visible at a glance — which is the whole reason for daily calls.
+interface ChartPoint {
+  x: number; mood: number | null; missed: boolean; completed: boolean; letter: string;
+}
+function moodChart(points: ChartPoint[]): string {
+  const y = (m: number) => 74 - (m - 1) * 14;
+  let grid = "";
+  for (const m of [1, 3, 5]) {
+    grid += `<line x1="6" y1="${y(m)}" x2="314" y2="${y(m)}" stroke="rgba(46,32,20,.09)" stroke-width="1"/>`;
+  }
+  let path = "";
+  let prev: ChartPoint | null = null;
+  for (const p of points) {
+    if (p.mood !== null) {
+      if (prev && prev.mood !== null) {
+        path += `<line x1="${prev.x}" y1="${y(prev.mood)}" x2="${p.x}" y2="${y(p.mood)}"
+          stroke="rgba(46,32,20,.3)" stroke-width="1.5" stroke-linecap="round"/>`;
+      }
+      prev = p;
+    } else if (p.completed || p.missed) {
+      prev = null;
+    }
+  }
+  let marks = "";
+  for (const p of points) {
+    if (p.mood !== null) {
+      marks += `<circle cx="${p.x}" cy="${y(p.mood)}" r="5" fill="${moodColor(p.mood, false)}"
+        stroke="#FFFDF7" stroke-width="1.5"/>`;
+    } else if (p.missed) {
+      marks += `<circle cx="${p.x}" cy="86" r="4.5" fill="none" stroke="#BC5127"
+        stroke-width="1.5" stroke-dasharray="2.6 2.2"/>`;
+    } else if (p.completed) {
+      marks += `<circle cx="${p.x}" cy="86" r="4" fill="#B9AD9C"/>`;
+    }
+  }
+  let letters = "";
+  for (const p of points) {
+    letters += `<text x="${p.x}" y="103" text-anchor="middle" font-family="Karla,sans-serif"
+      font-size="9.5" fill="rgba(110,91,69,.85)">${p.letter}</text>`;
+  }
+  return `<div class="chart">
+<svg viewBox="0 0 320 108" role="img" aria-label="Mood over the last ${DAYS} days">
+  ${grid}${path}${marks}${letters}
+</svg></div>
+<div class="legend">
+  <span><i style="background:#77875F"></i>good</span>
+  <span><i style="background:#D9A441"></i>steady</span>
+  <span><i style="background:#BC5127"></i>low</span>
+  <span><i style="border:1.5px dashed #BC5127"></i>no answer</span>
+</div>`;
 }
 
 Deno.serve(async (req) => {
@@ -142,7 +308,6 @@ Deno.serve(async (req) => {
 
   const name = senior.preferred_name || senior.first_name;
 
-  // Last 14 senior-local days of call activity, newest first.
   const since = new Date(Date.now() - DAYS * 864e5).toISOString().slice(0, 10);
   const { data: calls } = await supabase.from("calls")
     .select(
@@ -164,7 +329,9 @@ Deno.serve(async (req) => {
     minutes: number;
     mood: number | null;
     urgent: boolean;
-    chips: string[];
+    slept: boolean | null;
+    ate: boolean | null;
+    meds: boolean | null;
     flags: Flag[];
     summary: string | null;
   }
@@ -172,8 +339,8 @@ Deno.serve(async (req) => {
   for (const c of calls ?? []) {
     const date = c.scheduled_local_date as string;
     const cur = byDate.get(date) ?? {
-      date, completed: false, missed: false, minutes: 0,
-      mood: null, urgent: false, chips: [], flags: [], summary: null,
+      date, completed: false, missed: false, minutes: 0, mood: null, urgent: false,
+      slept: null, ate: null, meds: null, flags: [], summary: null,
     };
     if (c.status === "completed" && !cur.completed) {
       const s = (Array.isArray(c.summary) ? c.summary[0] : c.summary) as
@@ -188,15 +355,9 @@ Deno.serve(async (req) => {
         cur.mood = s.mood_score;
         cur.flags = Array.isArray(s.flags) ? s.flags : [];
         cur.urgent = cur.flags.some(isUrgent);
-        if (typeof s.slept_well === "boolean") {
-          cur.chips.push(`😴 slept ${s.slept_well ? "well" : "poorly"}`);
-        }
-        if (typeof s.ate_today === "boolean") {
-          cur.chips.push(`🍽️ ${s.ate_today ? "ate" : "not eaten yet"}`);
-        }
-        if (typeof s.meds_taken === "boolean") {
-          cur.chips.push(`💊 ${s.meds_taken ? "taken" : "not taken"}`);
-        }
+        cur.slept = typeof s.slept_well === "boolean" ? s.slept_well : null;
+        cur.ate = typeof s.ate_today === "boolean" ? s.ate_today : null;
+        cur.meds = typeof s.meds_taken === "boolean" ? s.meds_taken : null;
       }
     } else if (c.status === "no_answer" && !cur.completed) {
       cur.missed = true;
@@ -204,29 +365,23 @@ Deno.serve(async (req) => {
     byDate.set(date, cur);
   }
 
-  // The 14-day dot strip, oldest → newest, senior-local dates.
   const fmt = new Intl.DateTimeFormat("en-CA", {
     timeZone: senior.timezone, year: "numeric", month: "2-digit", day: "2-digit",
   });
   const dowFmt = new Intl.DateTimeFormat("en-US", {
     timeZone: senior.timezone, weekday: "narrow",
   });
-  let strip = "";
+  const points: ChartPoint[] = [];
   for (let i = DAYS - 1; i >= 0; i--) {
     const d = new Date(Date.now() - i * 864e5);
-    const date = fmt.format(d);
-    const day = byDate.get(date);
-    let dotStyle = "";
-    let dotClass = "dot";
-    if (day?.completed) {
-      dotClass += " filled";
-      dotStyle = `background:${moodColor(day.mood, day.urgent)}`;
-      if (day.mood === null && !day.urgent) dotStyle = "background:#B9AD9C";
-    } else if (day?.missed) {
-      dotClass += " missed";
-    }
-    strip += `<div class="day"><div class="${dotClass}" style="${dotStyle}"></div>` +
-      `<div class="dow">${dowFmt.format(d)}</div></div>`;
+    const day = byDate.get(fmt.format(d));
+    points.push({
+      x: 14 + (DAYS - 1 - i) * (292 / (DAYS - 1)),
+      mood: day?.completed ? day.mood : null,
+      missed: !!day?.missed,
+      completed: !!day?.completed,
+      letter: dowFmt.format(d),
+    });
   }
 
   const days = [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
@@ -235,55 +390,102 @@ Deno.serve(async (req) => {
       weekday: "long", month: "long", day: "numeric",
     });
 
-  function dayCard(day: Day, latest: boolean): string {
-    if (!day.completed) {
-      return `<div class="card${latest ? " latest" : ""}">
-<div class="when"><span class="mood-pill" style="border:2px dashed var(--terra)"></span>
-<b>${prettyDate(day.date)}</b></div>
-<div class="summary">No conversation this day — Etta's calls went unanswered.
-The contact chain was notified.</div></div>`;
+  function tiles(day: Day): string {
+    const t: string[] = [];
+    if (day.slept !== null) {
+      t.push(`<div class="tile${day.slept ? "" : " neg"}"><svg><use href="#i-moon"/></svg>
+        <span class="v">${day.slept ? "Slept well" : "Slept poorly"}</span>
+        <span class="k">Sleep</span></div>`);
     }
-    const urgentFlags = day.flags.filter(isUrgent);
-    const watchFlags = day.flags.filter((f) => !isUrgent(f));
-    return `<div class="card${latest ? " latest" : ""}">
-<div class="when"><span class="mood-pill" style="background:${moodColor(day.mood, day.urgent)}"></span>
-<b>${prettyDate(day.date)}</b>
-${day.mood ? `· ${MOOD_WORDS[day.mood]}` : ""}<span class="spacer"></span>
-<span class="mins">${day.minutes} min</span></div>
-${day.chips.length ? `<div class="chips">${day.chips.map((c) => `<span class="chip">${esc(c)}</span>`).join("")}${day.mood ? `<span class="chip">Mood ${day.mood}/5</span>` : ""}</div>` : ""}
-<div class="summary">${esc(day.summary ?? "")}</div>
-${urgentFlags.length ? `<ul class="flags">${urgentFlags.map((f) => `<li class="urgent">${esc(flagText(f))}</li>`).join("")}</ul>` : ""}
-${watchFlags.length ? `<ul class="flags">${watchFlags.map((f) => `<li>${esc(flagText(f))}</li>`).join("")}</ul>` : ""}
-</div>`;
+    if (day.ate !== null) {
+      t.push(`<div class="tile${day.ate ? "" : " neg"}"><svg><use href="#i-meal"/></svg>
+        <span class="v">${day.ate ? "Has eaten" : "Not yet"}</span>
+        <span class="k">Meals</span></div>`);
+    }
+    if (day.meds !== null) {
+      t.push(`<div class="tile${day.meds ? "" : " neg"}"><svg><use href="#i-pill"/></svg>
+        <span class="v">${day.meds ? "Taken" : "Not taken"}</span>
+        <span class="k">Medication</span></div>`);
+    }
+    return t.length ? `<div class="tiles">${t.join("")}</div>` : "";
+  }
+
+  function notes(day: Day): string {
+    const group = (list: Flag[], urgent: boolean) => {
+      if (!list.length) return "";
+      const heading = urgent ? "Needs your attention" : "Keeping an eye on";
+      const items = list.map((f) =>
+        `<div class="note ${urgent ? "urgent" : "watch"}">
+<svg><use href="#${urgent ? "i-alert" : "i-watch"}"/></svg>
+<div>${f.type ? `<span class="lab">${esc(f.type)}</span>` : ""}${prose(flagText(f))}</div></div>`
+      ).join("");
+      return `<div class="note-group"><div class="eyebrow">${heading}</div>${items}</div>`;
+    };
+    return group(day.flags.filter(isUrgent), true) +
+      group(day.flags.filter((f) => !isUrgent(f)), false);
+  }
+
+  function dayPanel(day: Day, latest: boolean): string {
+    if (!day.completed) {
+      return `<div class="panel${latest ? " accent" : ""}">
+${latest ? `<div class="eyebrow">Most recent</div>` : ""}
+<div class="panel-head"><span class="panel-date">${prettyDate(day.date)}</span></div>
+<div class="note urgent" style="margin-top:12px"><svg><use href="#i-phone-off"/></svg>
+<div><span class="lab">No answer</span>Etta tried and couldn't reach ${esc(name)} that day.
+The contact chain was notified.</div></div></div>`;
+    }
+    return `<div class="panel${latest ? " accent" : ""}">
+${latest ? `<div class="eyebrow">Most recent check-in</div>` : ""}
+<div class="panel-head"><span class="panel-date">${prettyDate(day.date)}</span>
+<span class="mins">${day.minutes} min call</span></div>
+${
+      day.mood
+        ? `<div class="meter-word">Overall, <b>${MOOD_WORDS[day.mood]}</b></div>${moodMeter(day.mood, day.urgent)}`
+        : ""
+    }
+${tiles(day)}
+<p class="prose">${prose(day.summary ?? "")}</p>
+${notes(day)}</div>`;
   }
 
   const latest = days[0];
   const earlier = days.slice(1);
   const statusBanner = senior.status === "active" ? "" :
-    `<div class="banner">${
+    `<div class="banner"><svg><use href="#i-alert"/></svg><div>${
       senior.status === "revoked"
-        ? `${esc(name)} asked Etta to stop calling, and Etta honored it immediately. No calls are being placed. Starting again just takes a fresh yes from ${esc(name)}.`
-        : `Calls are currently paused.`
-    }</div>`;
+        ? `${esc(name)} asked Etta to stop calling, and Etta honored it immediately. No calls are being placed — starting again just takes a fresh yes from ${esc(name)}.`
+        : `Calls are paused right now.`
+    }</div></div>`;
 
-  const body = `<header><div class="logo">etta<span>.</span></div></header>
+  const body = `<div class="mast"><a class="logo" href="${SITE}">etta<span>.</span></a>
+<span class="kick">Family view</span></div>
 <h1>${esc(name)}'s check-ins</h1>
 <p class="sub">A daily call, honestly AI, always with ${esc(name)}'s consent — and this is what it hears.</p>
 ${statusBanner}
-<div class="strip"><div class="strip-title">Last ${DAYS} days</div><div class="dots">${strip}</div></div>
-${latest ? dayCard(latest, true) : `<div class="card"><div class="summary">No calls yet — the first check-in will appear here.</div></div>`}
-${earlier.length ? `<h2 style="font-size:18px;margin:18px 0 10px">Earlier</h2>` : ""}
-${earlier.map((day) => `<details><summary><span class="mood-pill" style="${
-    day.completed
-      ? `background:${moodColor(day.mood, day.urgent)}`
-      : "border:2px dashed var(--terra)"
-  }"></span>${prettyDate(day.date)}${day.completed && day.mood ? ` — ${MOOD_WORDS[day.mood]}` : day.completed ? "" : " — no answer"}<span class="spacer"></span>▾</summary>${dayCard(day, false)}</details>`).join("")}
-<p style="text-align:center;margin:22px 0 0"><a class="manage" href="/functions/v1/billing/${token}">Manage billing</a></p>
-<footer><b>Private to your family.</b> Anyone with this exact link can view this page —
-that's what makes it work without logins or apps. Keep it in the family; to get a
+<div class="panel"><div class="eyebrow">Last ${DAYS} days</div>${moodChart(points)}</div>
+${
+    latest
+      ? dayPanel(latest, true)
+      : `<div class="panel accent"><div class="eyebrow">Most recent</div>
+<p class="prose">No calls yet — the first check-in will appear here.</p></div>`
+  }
+${earlier.length ? `<h2 class="section">Earlier days</h2>` : ""}
+${
+    earlier.map((day) => `<details><summary>
+<span class="pip ${day.completed ? "" : "miss"}" style="${
+      day.completed ? `background:${moodColor(day.mood, day.urgent)}` : ""
+    }"></span>
+<span>${prettyDate(day.date)}</span>
+<span class="when-word">${
+      day.completed ? (day.mood ? MOOD_WORDS[day.mood] : "") : "no answer"
+    }</span><span class="chev">▾</span></summary>${dayPanel(day, false)}</details>`).join("")
+  }
+<div class="center"><a class="manage" href="${SITE}/b/${token}">Manage billing &amp; plan</a></div>
+<div class="foot"><b>Private to your family.</b> Anyone with this exact link can view this
+page — that's what makes it work without logins or apps. Keep it in the family; to get a
 fresh link (and retire this one), reply to Etta's number.<br><br>
 Etta is a check-in companion, not medical care or an emergency service. If something
-feels urgent, call ${esc(name)} — or 911 — first.</footer>`;
+feels urgent, call ${esc(name)} — or 911 — first.</div>`;
 
   return html(200, body, `Etta — ${name}'s check-ins`);
 });
