@@ -76,11 +76,17 @@ elderly and mortal, assuming three months of median tenure is an assumption
 worth testing before spending on acquisition.
 
 This is also the one number that moves most with a decision you fully control.
-Halving the trial to 7 days halves the burn. So does gating the trial to
-Standard-frequency calls regardless of plan, or starting the clock at the
-senior's consent call rather than at signup — the trial currently runs from
-checkout, and a family that takes four days to arrange the consent call is
-spending trial days on nothing.
+Halving the trial to 7 days halves the burn: Daily's carried cost drops from
+$22.91 to $11.45 and payback from 1.3 months to 0.6. Gating trial calls to
+Standard frequency regardless of plan does something similar.
+
+**What does _not_ help: moving the trial clock to the consent call.** Seniors
+are created `pending_consent`, and `place-due-calls` only calls seniors with
+`status = 'active'`, so no outbound calls happen between checkout and consent —
+those days cost nothing. Starting the clock at consent would *increase* trial
+COGS by converting dead days into calling days. It is a reasonable fairness and
+conversion argument (families currently lose trial days to scheduling the
+consent call), but it is not a cost saving, and should not be sold as one.
 
 ## Problem 2: emoji double the SMS bill
 
@@ -231,21 +237,53 @@ where f.subscription_status in ('trialing', 'canceled', 'incomplete_expired');
 
 ## Recommendation
 
-Don't change the prices. $19 and $39 sit correctly in the market band the
-business description identifies, and they clear COGS with room. Change these
-instead, in order of impact:
+**Don't change the prices.** $19 and $39 sit correctly in the market band the
+business description identifies, and they already clear COGS with room. The
+problem is not the price, it is the payback period — how long a customer must
+stay before repaying what it cost to acquire them.
 
-1. **Shorten or restructure the trial.** Largest single lever, entirely within
-   your control, and it does not touch the product promise. Starting the clock
-   at consent rather than at checkout is close to free.
-2. **Cap what the Daily plan's SMS fan-out costs** — shorten the body and let
-   the family page carry the detail, or price the 5-recipient tier separately.
-3. **Watch the call-length distribution**, not the average. The mean is fine;
-   the tail is what loses money. If the p90 call runs past 7 minutes on Daily,
-   revisit either `maxDurationSeconds` or the price.
-4. **Get a real conversion and churn number before spending on CAC.** Every
-   figure in Problem 1 is dominated by an assumption (40% conversion) that
-   nobody has measured yet.
+Three changes, none of which touch the headline price, take Daily from 45% to
+54% margin and payback from 1.3 months to 0.5:
+
+| # | Change | Effect |
+|---|---|---|
+| 1 | Trial 14 days → 7 | Daily carried cost $22.91 → $11.45 |
+| 2 | Summary SMS 8 segments → ~3 | −$3.50/mo at 2 recipients, −$8.70 at 5 |
+| 3 | `maxDurationSeconds` 600 → 420 | removes the only loss-making call length |
+
+Combined, at 4.5-minute calls and 2 recipients: Standard 58% / 0.4-month
+payback, Daily 54% / 0.5-month. Even the bad case (5 recipients, 6-minute
+calls) becomes 34% and 1.1 months instead of 13% and 7.6.
+
+Notes on each:
+
+1. **Trial.** Largest single lever and entirely within your control. The risk
+   is conversion — a shorter trial may convert worse, and that trade is only
+   worth making if you measure it. Gating trial calls to Standard frequency is
+   a gentler variant that keeps 14 days of calendar reassurance.
+2. **SMS.** Keep the leading signal emoji — it is the product — and cut the
+   body instead. A single emoji anywhere forces UCS-2 either way, so at 67
+   characters per segment the win comes from length, not from removing glyphs.
+   Move the chips and flag detail behind the `/f/<token>` link, which already
+   exists and renders better than SMS does.
+3. **Call cap.** The median call is 2.65 minutes, so a 7-minute cap touches
+   almost nobody — it truncates only the tail that loses money. Watch the p90,
+   not the mean.
+
+Two further options worth considering, in rough order of leverage:
+
+- **Cap included SMS recipients at 2–3 on Daily**, or price extras. "Summaries
+  to up to five family members" is the single feature that makes the plan
+  unprofitable; it is a pricing-shape problem, not a cost problem.
+- **Offer annual prepay** (e.g. $390/year). It does not change unit cost at all,
+  but it collects 12 months up front and so removes the payback risk entirely —
+  which is the actual exposure here.
+
+And the thing to do before any of it: **get a real conversion, churn, and CAC
+number.** Every figure above is dominated by an assumed 40% conversion, and the
+whole question of profitability turns on whether median tenure exceeds payback.
+The `unit_economics` view now gives you the cost side; the retention side still
+has to come from the market.
 
 Sources for the vendor rates: [Vapi pricing](https://telnyx.com/resources/vapi-pricing),
 [Twilio pricing](https://www.twilio.com/en-us/pricing),

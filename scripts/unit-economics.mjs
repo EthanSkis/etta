@@ -109,9 +109,12 @@ function monthlyCost(plan, opts) {
 // charge — "trialing" is in PAYING_STATUSES, so the scheduler treats it as live.
 // Every trial costs us money; only `conversion` of them ever bill. So each
 // paying customer carries the cost of 1/conversion trials.
-function trialDrag(plan, opts, conversion) {
+function trialDrag(plan, opts, conversion, trialDays = 14) {
   const m = monthlyCost(plan, opts);
-  const perTrial = (m.cogs - m.stripe) * (14 / (365 / 12)); // no Stripe fee: nothing is charged
+  // No Stripe fee: nothing is charged. `trialDays` is the BILLED trial length;
+  // note the clock currently starts at checkout, not at the senior's consent
+  // call, so any days spent waiting for consent are burned at full cost too.
+  const perTrial = (m.cogs - m.stripe) * (trialDays / (365 / 12));
   const perPayingCustomer = perTrial / conversion;
   // Months of steady-state margin needed to repay it. CAC is not modelled here
   // and lands on top of this.
@@ -204,8 +207,9 @@ for (const plan of ["standard", "daily"]) {
   console.log(`  talk ${m.talkMinutes.toFixed(0)} min + ${m.deadMinutes.toFixed(0)} min unanswered`);
   console.log(`  voice ${usd(m.voice)}   llm ${usd(m.llm)}   sms ${usd(m.sms)}   stripe ${usd(m.stripe)}`);
   console.log(`  COGS ${usd(m.cogs)}  ->  margin ${usd(m.margin)} (${pct(m.margin, m.revenue)})`);
-  const t = trialDrag(plan, base, 0.4);
-  console.log(`  one 14-day trial burns ${usd(t.perTrial)}; at 40% conversion each paying ` +
+  const t = trialDrag(plan, base, Number(argv.conversion ?? 0.4), Number(argv.trialDays ?? 14));
+  console.log(`  one ${argv.trialDays ?? 14}-day trial burns ${usd(t.perTrial)}; at ` +
+    `${((Number(argv.conversion ?? 0.4)) * 100).toFixed(0)}% conversion each paying ` +
     `customer carries ${usd(t.perPayingCustomer)}`);
   console.log(`  payback: ${t.paybackMonths.toFixed(1)} months of margin before this ` +
     `customer is net positive (before CAC)\n`);
