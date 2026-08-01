@@ -1,4 +1,4 @@
-// signup — the public endpoint behind ettacalls.com/signup.html.
+// signup — the public endpoint behind ettacalls.com/signup.
 //
 // Creates the family + senior + schedule with the senior in pending_consent,
 // then hands back a Stripe Checkout URL. No call can be placed by this form:
@@ -232,8 +232,8 @@ Deno.serve(async (req) => {
       "subscription_data[metadata][family_id]": family.id,
       "metadata[family_id]": family.id,
       allow_promotion_codes: "true",
-      success_url: `${SITE}/signup.html?started=1&who=${encodeURIComponent(parentName)}`,
-      cancel_url: `${SITE}/signup.html?canceled=1`,
+      success_url: `${SITE}/signup?started=1&who=${encodeURIComponent(parentName)}`,
+      cancel_url: `${SITE}/signup?canceled=1`,
     });
 
     return json({

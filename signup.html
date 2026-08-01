@@ -57,10 +57,11 @@
   background-repeat:no-repeat;background-position:right 16px center;
 }
 /* two-up row — labels can wrap to different heights, so the controls
-   are pushed to the bottom of each cell to keep them on one line. */
+   are pushed off the label and centred against the taller neighbour. */
 .sf-row{display:grid;grid-template-columns:1fr 1fr;gap:0 20px;align-items:stretch}
 .sf-row > .sf + .sf{margin-top:0}
-.sf-row .sf select,.sf-row .sf input{margin-top:auto}
+.sf-row .sf select,.sf-row .sf > input{margin-top:auto;margin-bottom:auto}
+.sf-row .sf .wheel{margin-top:auto}
 @media(max-width:540px){
   .sf-row{grid-template-columns:1fr}
   .sf-row .sf + .sf{margin-top:26px}
@@ -89,6 +90,41 @@
 @media(max-width:420px){
   .phone-boxes{gap:7px}
   .pd{font-size:17px;padding:14px 0}
+}
+
+/* ---------- call-time wheel ----------
+   A snap-scrolling drum: the time sitting in the band is the answer. */
+.wheel{
+  position:relative;height:138px;overflow:hidden;outline:none;
+  background:var(--paper);border:1.5px solid var(--line);border-radius:14px;
+  transition:border-color .18s ease,box-shadow .18s ease,background .18s ease;
+}
+.wheel:focus,.wheel:focus-within{border-color:var(--terra);background:var(--card);
+  box-shadow:0 0 0 4px rgba(188,81,39,.13)}
+.wheel-band{
+  position:absolute;left:7px;right:7px;top:50%;height:46px;transform:translateY(-50%);
+  border-radius:10px;background:rgba(188,81,39,.09);pointer-events:none;z-index:1;
+}
+.wheel-scroll{
+  position:relative;z-index:2;height:100%;overflow-y:scroll;overscroll-behavior:contain;
+  scroll-snap-type:y mandatory;padding:46px 0;
+  scrollbar-width:none;-ms-overflow-style:none;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 2%,#000 30%,#000 70%,transparent 98%);
+  mask-image:linear-gradient(to bottom,transparent 2%,#000 30%,#000 70%,transparent 98%);
+}
+.wheel-scroll::-webkit-scrollbar{display:none}
+.wheel-opt{
+  height:46px;display:flex;align-items:center;justify-content:center;text-align:center;
+  scroll-snap-align:center;cursor:pointer;user-select:none;padding:0 8px;
+  font-size:15.5px;color:var(--ink-soft);line-height:1.2;
+  transition:color .18s ease,transform .18s ease;
+}
+.wheel-opt.on{color:var(--ink);font-weight:700;font-size:16.5px}
+@media(max-width:540px){
+  .wheel{height:130px}
+  .wheel-band{height:44px}
+  .wheel-scroll{padding:43px 0}
+  .wheel-opt{height:44px}
 }
 
 /* ---------- plan picker ---------- */
@@ -140,15 +176,15 @@
 
 <header>
   <nav class="nav">
-    <a class="logo" href="index.html">etta<span>.</span></a>
+    <a class="logo" href="/">etta<span>.</span></a>
     <div class="nav-links">
-      <a href="how-it-works.html">How it works</a>
-      <a href="pledge.html">Our pledge</a>
-      <a href="pricing.html">Pricing</a>
-      <a href="faq.html">FAQ</a>
+      <a href="/how-it-works">How it works</a>
+      <a href="/pledge">Our pledge</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/faq">FAQ</a>
     </div>
     <div class="nav-actions">
-      <a class="btn small" href="signup.html">Get started</a>
+      <a class="btn small" href="/signup">Get started</a>
       <button class="menu-btn" type="button" aria-label="Menu" aria-expanded="false"><i></i><i></i><i></i></button>
     </div>
   </nav>
@@ -236,8 +272,14 @@
           <div class="sf-row">
             <label class="sf"><span class="sf-lab" id="lbl-tz">Where they live</span>
               <select name="timezone"></select></label>
-            <label class="sf"><span class="sf-lab" id="lbl-time">Call time <em>(their time)</em></span>
-              <select name="call_time"></select></label>
+            <div class="sf"><span class="sf-lab" id="lbl-time">Call time <em>(their time)</em></span>
+              <div class="wheel" id="time-wheel" tabindex="0" role="listbox"
+                aria-labelledby="lbl-time" aria-activedescendant="">
+                <span class="wheel-band" aria-hidden="true"></span>
+                <div class="wheel-scroll" id="time-scroll"></div>
+              </div>
+              <input type="hidden" name="call_time">
+            </div>
           </div>
           <label class="sf"><span class="sf-lab" id="lbl-notes">Anything Etta should know? <em>(optional)</em></span>
             <textarea name="notes" rows="3" maxlength="1000" placeholder="Loves her garden. Widowed last year. Grandkids are Ben and Lucy…"></textarea></label>
@@ -261,8 +303,8 @@
             <span class="consent-body">Yes, text me Etta's check-in notes and alerts at this number.
               Message frequency varies (about one message per scheduled check-in).
               Msg &amp; data rates may apply. Reply STOP to opt out, HELP for help.
-              See our <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a>
-              and <a href="terms.html" target="_blank" rel="noopener">terms</a>.</span>
+              See our <a href="/privacy" target="_blank" rel="noopener">privacy policy</a>
+              and <a href="/terms" target="_blank" rel="noopener">terms</a>.</span>
           </label>
 
           <div class="hp-field" aria-hidden="true"><input type="text" name="website" tabindex="-1" autocomplete="off"></div>
@@ -296,16 +338,16 @@
   <div class="wrap">
     <div class="foot-grid">
       <div>
-        <a class="logo" href="index.html">etta<span>.</span></a>
+        <a class="logo" href="/">etta<span>.</span></a>
         <p style="margin-top:10px;max-width:34em">The daily call you can't always make — honest about being AI, welcome because of it.</p>
       </div>
       <div class="foot-links">
-        <a href="how-it-works.html">How it works</a>
-        <a href="pledge.html">Our pledge</a>
-        <a href="pricing.html">Pricing</a>
-        <a href="faq.html">FAQ</a>
-        <a href="privacy.html">Privacy</a>
-        <a href="terms.html">Terms</a>
+        <a href="/how-it-works">How it works</a>
+        <a href="/pledge">Our pledge</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/faq">FAQ</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
         <a href="mailto:hello@ettacalls.com">hello@ettacalls.com</a>
       </div>
     </div>
@@ -340,7 +382,6 @@
   var done = document.getElementById("signup-done");
   var msg = form.querySelector(".signup-msg");
   var tzSel = form.elements.timezone;
-  var timeSel = form.elements.call_time;
   var steps = Array.prototype.slice.call(form.querySelectorAll(".sq"));
   var railFill = document.getElementById("rail-fill");
   var railNum = document.getElementById("rail-num");
@@ -356,18 +397,88 @@
     if (TZ.some(function (z) { return z[1] === mine; })) tzSel.value = mine;
   } catch (e) { /* default stands */ }
 
+  /* ---------- call-time wheel ----------
+     A drum you spin instead of a dropdown: whichever time lands in the
+     band is the answer, and it is mirrored into the hidden call_time
+     input the form submits. Scroll, drag, click a row, or use the arrow
+     keys — all four land on the same snapped index. */
+  var TIMES = [];
   for (var h = 7; h <= 19; h++) {
     ["00", "30"].forEach(function (m) {
       if (h >= 12 && m === "30") return; // half-hours only in the morning
-      var v = (h < 10 ? "0" + h : "" + h) + ":" + m;
       var h12 = h % 12 || 12;
-      var label = h12 + ":" + m + (h < 12 ? " in the morning" : h < 17 ? " in the afternoon" : " in the evening");
-      var o = document.createElement("option");
-      o.value = v; o.textContent = label;
-      timeSel.appendChild(o);
+      TIMES.push([
+        (h < 10 ? "0" + h : "" + h) + ":" + m,
+        h12 + ":" + m + (h < 12 ? " in the morning" : h < 17 ? " in the afternoon" : " in the evening")
+      ]);
     });
   }
-  timeSel.value = "09:00";
+
+  var timeVal = form.elements.call_time;
+  var wheel = document.getElementById("time-wheel");
+  var track = document.getElementById("time-scroll");
+  var opts = TIMES.map(function (t, i) {
+    var el = document.createElement("div");
+    el.className = "wheel-opt";
+    el.id = "t-" + t[0].replace(":", "");
+    el.setAttribute("role", "option");
+    el.setAttribute("aria-selected", "false");
+    el.dataset.value = t[0];
+    el.textContent = t[1];
+    el.addEventListener("click", function () { scrollToIndex(i, true); });
+    track.appendChild(el);
+    return el;
+  });
+
+  var current = -1;
+  function rowHeight() { return opts[0].offsetHeight || 46; }
+  function select(i) {
+    i = Math.max(0, Math.min(TIMES.length - 1, i));
+    if (i === current) return;
+    if (opts[current]) {
+      opts[current].classList.remove("on");
+      opts[current].setAttribute("aria-selected", "false");
+    }
+    current = i;
+    opts[i].classList.add("on");
+    opts[i].setAttribute("aria-selected", "true");
+    wheel.setAttribute("aria-activedescendant", opts[i].id);
+    timeVal.value = TIMES[i][0];
+  }
+  function scrollToIndex(i, smooth) {
+    i = Math.max(0, Math.min(TIMES.length - 1, i));
+    select(i);
+    track.scrollTo({ top: i * rowHeight(), behavior: smooth ? "smooth" : "auto" });
+  }
+
+  var ticking = false;
+  track.addEventListener("scroll", function () {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      ticking = false;
+      select(Math.round(track.scrollTop / rowHeight()));
+    });
+  }, { passive: true });
+
+  wheel.addEventListener("keydown", function (e) {
+    var step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 :
+               e.key === "PageDown" ? 3 : e.key === "PageUp" ? -3 : 0;
+    if (!step) {
+      if (e.key === "Home") { e.preventDefault(); scrollToIndex(0, true); }
+      else if (e.key === "End") { e.preventDefault(); scrollToIndex(TIMES.length - 1, true); }
+      return;
+    }
+    e.preventDefault();
+    scrollToIndex(current + step, true);
+  });
+
+  // The wheel starts life inside a hidden step, where it has no height to
+  // scroll; the value is set now and the drum is positioned on reveal.
+  function syncWheel() { track.scrollTop = current * rowHeight(); }
+  var startAt = 0;
+  TIMES.forEach(function (t, i) { if (t[0] === "09:00") startAt = i; });
+  select(startAt);
 
   /* ---------- segmented phone entry ----------
      Three boxes divided into one cell per digit — 3 · 3 · 4 — that behave
@@ -493,6 +604,7 @@
     if (i >= steps.length || steps[i].classList.contains("show")) return;
     if (i === 4) personalize();
     steps[i].classList.add("show");
+    if (i === 4) syncWheel();
     progress();
   }
 
@@ -604,6 +716,7 @@
     msg.textContent = "Checkout canceled — nothing was charged. Your details are still here.";
     steps.forEach(function (s) { s.classList.add("show"); });
     personalize();
+    syncWheel();
     progress();
   }
 })();
