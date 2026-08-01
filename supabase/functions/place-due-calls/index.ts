@@ -22,7 +22,9 @@ const STALE_HOURS = 2;    // scheduled rows older than this are marked failed, n
 
 // Billing states that still get calls. past_due is deliberate: a card that
 // needs updating shouldn't cut off someone's daily check-in mid-retry.
-const PAYING_STATUSES = ["trialing", "active", "past_due"];
+// "comped" covers accounts that pay nothing by design — the founder pilot,
+// friends-and-family, and B2B/partner trials — so they never depend on Stripe.
+const PAYING_STATUSES = ["trialing", "active", "past_due", "comped"];
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
