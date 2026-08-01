@@ -1,11 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+
+  "//": "cleanUrls serves every page without its .html and 308s the old .html URL to the clean one, so links already out in the world keep working.",
+  "cleanUrls": true,
+
   "rewrites": [
     { "source": "/f/:token", "destination": "/api/f/:token" },
     { "source": "/b/:token", "destination": "/api/b/:token" },
-    { "source": "/a/:token/:call", "destination": "/api/a/:token/:call" },
-
-    { "source": "/privacy", "destination": "/privacy.html" },
-    { "source": "/terms", "destination": "/terms.html" }
+    { "source": "/a/:token/:call", "destination": "/api/a/:token/:call" }
   ]
 }
