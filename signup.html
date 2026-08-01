@@ -41,14 +41,14 @@
 .sf + .sf,.sf-row + .sf{margin-top:26px}
 .sf-lab{font-family:var(--serif);font-size:18px;font-weight:500;line-height:1.35;letter-spacing:-.01em}
 .sf-lab em{font-style:italic;font-family:var(--sans);font-size:13.5px;font-weight:400;color:var(--ink-soft)}
-.sf input:not(.pb),.sf select,.sf textarea{
+.sf input:not(.pd),.sf select,.sf textarea{
   width:100%;font-family:var(--sans);font-size:17px;color:var(--ink);
   background:var(--paper);border:1.5px solid var(--line);border-radius:14px;
   padding:14px 16px;outline:none;
   transition:border-color .18s ease,box-shadow .18s ease,background .18s ease;
 }
-.sf input:not(.pb)::placeholder,.sf textarea::placeholder{color:rgba(110,91,69,.42)}
-.sf input:not(.pb):focus,.sf select:focus,.sf textarea:focus{
+.sf input:not(.pd)::placeholder,.sf textarea::placeholder{color:rgba(110,91,69,.42)}
+.sf input:not(.pd):focus,.sf select:focus,.sf textarea:focus{
   border-color:var(--terra);background:var(--card);box-shadow:0 0 0 4px rgba(188,81,39,.13)}
 .sf textarea{line-height:1.55;resize:none;font-size:16px}
 .sf select{
@@ -66,28 +66,29 @@
   .sf-row .sf + .sf{margin-top:26px}
 }
 
-/* ---------- segmented phone entry ---------- */
-.phone-boxes{display:flex;align-items:center;gap:8px;max-width:430px}
-.phone-boxes .sep{flex:none;font-size:19px;font-weight:500;color:var(--ink-soft);
-  line-height:1;user-select:none}
-.phone-boxes .sep.open{margin-right:-3px}
-.phone-boxes .sep.close{margin-left:-3px}
-.pb{
-  min-width:0;text-align:center;font-family:var(--sans);font-size:21px;font-weight:600;
-  letter-spacing:.09em;color:var(--ink);
+/* ---------- segmented phone entry ----------
+   Three boxes, each split into one cell per digit: 3 · 3 · 4. */
+.phone-boxes{display:flex;align-items:center;gap:10px;max-width:440px}
+.pgroup{
+  display:flex;flex:3 1 0;min-width:0;overflow:hidden;
   background:var(--paper);border:1.5px solid var(--line);border-radius:14px;
-  padding:15px 4px;outline:none;
   transition:border-color .18s ease,box-shadow .18s ease,background .18s ease;
 }
-.pb::placeholder{color:rgba(110,91,69,.3);font-weight:500;letter-spacing:.09em}
-.pb-3{flex:3 1 0}
-.pb-4{flex:4 1 0}
-.pb.filled{border-color:rgba(188,81,39,.42);background:var(--card)}
-.pb:focus{border-color:var(--terra);background:var(--card);box-shadow:0 0 0 4px rgba(188,81,39,.13)}
-.phone-boxes.done .sep{color:var(--terra-deep)}
+.pgroup.g4{flex:4 1 0}
+.pgroup.filled{border-color:rgba(188,81,39,.42);background:var(--card)}
+.pgroup:focus-within{border-color:var(--terra);background:var(--card);
+  box-shadow:0 0 0 4px rgba(188,81,39,.13)}
+.pd{
+  flex:1 1 0;min-width:0;width:100%;text-align:center;
+  font-family:var(--sans);font-size:19px;font-weight:600;color:var(--ink);
+  background:transparent;border:0;border-radius:0;padding:15px 0;outline:none;
+  transition:background .18s ease;
+}
+.pd + .pd{border-left:1.5px solid rgba(46,32,20,.13)}
+.pd:focus{background:rgba(188,81,39,.08)}
 @media(max-width:420px){
-  .phone-boxes{gap:6px}
-  .pb{font-size:18px;padding:14px 2px;letter-spacing:.04em}
+  .phone-boxes{gap:7px}
+  .pd{font-size:17px;padding:14px 0}
 }
 
 /* ---------- plan picker ---------- */
@@ -180,15 +181,22 @@
           <div class="sf">
             <span class="sf-lab" id="lbl-your-phone">Your mobile number <em>— Etta texts you the notes here</em></span>
             <div class="phone-boxes" data-phone="your_phone" role="group" aria-labelledby="lbl-your-phone">
-              <span class="sep open" aria-hidden="true">(</span>
-              <input class="pb pb-3" type="tel" inputmode="numeric" maxlength="3" placeholder="555"
-                autocomplete="tel-area-code" aria-label="Area code">
-              <span class="sep close" aria-hidden="true">)</span>
-              <input class="pb pb-3" type="tel" inputmode="numeric" maxlength="3" placeholder="201"
-                autocomplete="tel-local-prefix" aria-label="Next three digits">
-              <span class="sep" aria-hidden="true">&#8211;</span>
-              <input class="pb pb-4" type="tel" inputmode="numeric" maxlength="4" placeholder="8890"
-                autocomplete="tel-local-suffix" aria-label="Last four digits">
+              <span class="pgroup">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 1">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 2">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 3">
+              </span>
+              <span class="pgroup">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 4">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 5">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 6">
+              </span>
+              <span class="pgroup g4">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 7">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 8">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 9">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 10">
+              </span>
               <input type="hidden" name="your_phone">
             </div>
           </div>
@@ -203,15 +211,22 @@
           <div class="sf">
             <span class="sf-lab" id="lbl-parent-phone">Their phone number <em>— the phone that will ring</em></span>
             <div class="phone-boxes" data-phone="parent_phone" role="group" aria-labelledby="lbl-parent-phone">
-              <span class="sep open" aria-hidden="true">(</span>
-              <input class="pb pb-3" type="tel" inputmode="numeric" maxlength="3" placeholder="555"
-                aria-label="Area code">
-              <span class="sep close" aria-hidden="true">)</span>
-              <input class="pb pb-3" type="tel" inputmode="numeric" maxlength="3" placeholder="314"
-                aria-label="Next three digits">
-              <span class="sep" aria-hidden="true">&#8211;</span>
-              <input class="pb pb-4" type="tel" inputmode="numeric" maxlength="4" placeholder="2760"
-                aria-label="Last four digits">
+              <span class="pgroup">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 1">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 2">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 3">
+              </span>
+              <span class="pgroup">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 4">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 5">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 6">
+              </span>
+              <span class="pgroup g4">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 7">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 8">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 9">
+                <input class="pd" type="tel" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Digit 10">
+              </span>
               <input type="hidden" name="parent_phone">
             </div>
           </div>
@@ -355,96 +370,90 @@
   timeSel.value = "09:00";
 
   /* ---------- segmented phone entry ----------
-     Three boxes — (###) ###-#### — that behave like one field: digits spill
-     forward, backspace walks back, and a pasted number lands in the right
-     boxes. The hidden input keeps the formatted value the form submits. */
+     Three boxes divided into one cell per digit — 3 · 3 · 4 — that behave
+     like a single field: typing walks forward, backspace walks back, and a
+     pasted number spreads across every cell. The hidden input carries the
+     ten digits the form submits. */
   function phoneBoxes(box, onChange) {
-    var segs = Array.prototype.slice.call(box.querySelectorAll(".pb"));
+    var cells = Array.prototype.slice.call(box.querySelectorAll(".pd"));
+    var groups = Array.prototype.slice.call(box.querySelectorAll(".pgroup"));
     var hidden = box.querySelector('input[type="hidden"]');
-    var LEN = segs.map(function (s) { return +s.getAttribute("maxlength"); });
 
     function digits() {
-      return segs.map(function (s) { return s.value; }).join("");
+      return cells.map(function (c) { return c.value; }).join("");
     }
-    function caretEnd(s) {
-      s.focus();
-      try { s.setSelectionRange(s.value.length, s.value.length); } catch (e) { /* ignore */ }
+    function go(i) {
+      var c = cells[i];
+      if (!c) return;
+      c.focus();
+      try { c.select(); } catch (e) { /* ignore */ }
     }
     function sync() {
       var d = digits();
-      segs.forEach(function (s) { s.classList.toggle("filled", s.value.length > 0); });
+      groups.forEach(function (g) {
+        var own = Array.prototype.slice.call(g.querySelectorAll(".pd"));
+        g.classList.toggle("filled", own.every(function (c) { return c.value; }));
+      });
       box.classList.toggle("done", d.length === 10);
-      hidden.value = d.length === 10
-        ? "(" + d.slice(0, 3) + ") " + d.slice(3, 6) + "-" + d.slice(6)
-        : d;
+      hidden.value = d;
       if (onChange) onChange(d);
     }
-    function spread(raw, focusEnd) {
+    // Fills cells from `at` onward; a whole number always starts at cell 0
+    // so a leading country code can be dropped.
+    function spread(raw, at) {
       var d = raw.replace(/\D/g, "");
-      if (d.length === 11 && d.charAt(0) === "1") d = d.slice(1);
-      d = d.slice(0, 10);
-      var at = 0, last = 0;
-      segs.forEach(function (s, i) {
-        s.value = d.slice(at, at + LEN[i]);
-        if (s.value.length) last = i;
-        at += LEN[i];
-      });
+      if (at === 0 && d.length === 11 && d.charAt(0) === "1") d = d.slice(1);
+      var i = at, k = 0;
+      while (i < cells.length && k < d.length) { cells[i++].value = d.charAt(k++); }
       sync();
-      if (focusEnd) {
-        var t = segs[last];
-        if (t.value.length === LEN[last] && segs[last + 1]) t = segs[last + 1];
-        caretEnd(t);
-      }
+      go(Math.min(i, cells.length - 1));
     }
 
-    segs.forEach(function (seg, i) {
-      seg.addEventListener("input", function () {
-        var v = seg.value.replace(/\D/g, "");
-        var overflow = v.slice(LEN[i]);
-        seg.value = v.slice(0, LEN[i]);
-        if (overflow && segs[i + 1]) {
-          segs[i + 1].value = (overflow + segs[i + 1].value).replace(/\D/g, "").slice(0, LEN[i + 1]);
-          caretEnd(segs[i + 1]);
-        } else if (seg.value.length === LEN[i] && segs[i + 1] && !segs[i + 1].value) {
-          caretEnd(segs[i + 1]);
-        }
+    cells.forEach(function (cell, i) {
+      cell.addEventListener("input", function () {
+        var v = cell.value.replace(/\D/g, "");
+        if (v.length > 1) { spread(v, i); return; }   // autofill dumped a whole number
+        cell.value = v;
         sync();
+        if (v) go(i + 1);
       });
 
-      seg.addEventListener("keydown", function (e) {
-        if (e.key === "Backspace" && !seg.value && segs[i - 1]) {
+      cell.addEventListener("keydown", function (e) {
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        if (e.key === "Backspace" && !cell.value && cells[i - 1]) {
           e.preventDefault();
-          segs[i - 1].value = segs[i - 1].value.slice(0, -1);
-          caretEnd(segs[i - 1]);
+          cells[i - 1].value = "";
+          go(i - 1);
           sync();
-        } else if (e.key === "ArrowLeft" && seg.selectionStart === 0 && segs[i - 1]) {
+        } else if (e.key === "ArrowLeft" && cells[i - 1]) {
           e.preventDefault();
-          caretEnd(segs[i - 1]);
-        } else if (e.key === "ArrowRight" && seg.selectionStart === seg.value.length && segs[i + 1]) {
+          go(i - 1);
+        } else if (e.key === "ArrowRight" && cells[i + 1]) {
           e.preventDefault();
-          segs[i + 1].focus();
-          segs[i + 1].setSelectionRange(0, 0);
-        } else if (/^\d$/.test(e.key) && seg.value.length === LEN[i] &&
-                   seg.selectionStart === seg.selectionEnd && segs[i + 1]) {
-          // typing past a full box carries the digit into the next one
+          go(i + 1);
+        } else if (/^\d$/.test(e.key) && cell.value) {
+          // typing over a filled cell replaces it and moves on
           e.preventDefault();
-          segs[i + 1].value = (e.key + segs[i + 1].value).slice(0, LEN[i + 1]);
-          segs[i + 1].focus();
-          segs[i + 1].setSelectionRange(1, 1);
+          cell.value = e.key;
           sync();
+          go(i + 1);
         }
       });
 
-      // A pasted "+1 (555) 201-8890" lands across all three boxes, not one.
-      seg.addEventListener("paste", function (e) {
+      // A pasted "+1 (555) 201-8890" spreads across the cells, not into one.
+      cell.addEventListener("paste", function (e) {
         var text = ((e.clipboardData || window.clipboardData) || {}).getData("text") || "";
         if (!/\d/.test(text)) return;
         e.preventDefault();
-        spread(text, true);
+        spread(text, text.replace(/\D/g, "").length >= 10 ? 0 : i);
+      });
+
+      cell.addEventListener("focus", function () {
+        try { cell.select(); } catch (e) { /* ignore */ }
       });
     });
 
-    return { digits: digits, set: spread };
+    return { digits: digits, set: function (v) { spread(v, 0); } };
   }
 
   /* ---------- one box at a time ---------- */
