@@ -18,6 +18,10 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const MAX_ATTEMPTS = 3;        // 1 scheduled call + 2 retries
 const RETRY_DELAY_MINUTES = 30;
+// $0.0079 Twilio + $0.003 A2P 10DLC carrier surcharge, per outbound segment.
+// Only used to price our own sends for the unit_economics view — Twilio's
+// authoritative price settles hours later and is not worth a second round trip.
+const SMS_SEGMENT_USD = 0.0109;
 const DEFAULT_FROM_NUMBER = "+17622394275"; // "Etta outbound" — same number Etta calls from
 
 // The family page is served from our own domain, not the Supabase function
@@ -81,14 +85,28 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-// Sends one SMS per recipient. True only if every send succeeded.
-async function sendText(to: string[], body: string): Promise<boolean> {
+// Sends one SMS per recipient.
+//
+// Returns what it cost as well as whether it worked. Etta charges a flat monthly
+// price but pays Twilio per SEGMENT per recipient, and the fan-out is real: the
+// Daily plan advertises summaries to five family members, so one call can bill
+// five times. Segments are also not the same as messages — a body with emoji is
+// UCS-2, which holds 67 characters per segment instead of GSM-7's 153, so the
+// signal emoji and chips roughly double the segment count of every summary.
+// None of that was visible anywhere, so it goes in the return value.
+async function sendText(
+  to: string[],
+  body: string,
+): Promise<{ ok: boolean; segments: number; recipients: number; costUsd: number }> {
   const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
   const token = Deno.env.get("TWILIO_AUTH_TOKEN");
   const from = Deno.env.get("TWILIO_FROM_NUMBER") ?? DEFAULT_FROM_NUMBER;
-  if (!sid || !token || to.length === 0) return false;
+  const nil = { ok: false, segments: 0, recipients: 0, costUsd: 0 };
+  if (!sid || !token || to.length === 0) return nil;
 
   let allOk = true;
+  let segments = 0;   // segments in ONE copy; Twilio reports the same for each
+  let delivered = 0;
   for (const number of to) {
     const res = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
@@ -104,9 +122,39 @@ async function sendText(to: string[], body: string): Promise<boolean> {
     if (!res.ok) {
       console.error("twilio sms failed:", number, res.status, await res.text());
       allOk = false;
+      continue;
+    }
+    delivered++;
+    // Twilio's `price` is null at accept time (it settles later), so segments
+    // are the only cost signal available here. Rate it ourselves.
+    try {
+      const sent = await res.json();
+      segments = Math.max(segments, parseInt(sent.num_segments ?? "1", 10) || 1);
+    } catch {
+      segments = Math.max(segments, 1);
     }
   }
-  return allOk;
+  return {
+    ok: allOk,
+    segments,
+    recipients: delivered,
+    costUsd: +(segments * delivered * SMS_SEGMENT_USD).toFixed(4),
+  };
+}
+
+// What the provider charged us for this call. Vapi puts the total on `cost`
+// and the per-vendor split (transport, stt, llm, tts, platform fee) on
+// `costBreakdown`; both were being discarded, which is why margin could only
+// ever be modelled and never measured. A no-answer still has a cost — the
+// voicemail greeting is billable — so this is not gated on status.
+// deno-lint-ignore no-explicit-any
+function providerCost(message: any): Record<string, unknown> {
+  const raw = message?.cost ?? message?.call?.cost;
+  const total = typeof raw === "number" ? raw : Number(raw);
+  return {
+    provider_cost_usd: Number.isFinite(total) ? total : null,
+    cost_breakdown: message?.costBreakdown ?? message?.call?.costBreakdown ?? null,
+  };
 }
 
 // deno-lint-ignore no-explicit-any
@@ -276,7 +324,7 @@ async function handleRevocation(call: any, structured: any) {
       `usually the best next step. If ${name} wants the calls again, it just takes ` +
       `a fresh yes from them. — Etta`,
   );
-  if (sent && esc) {
+  if (sent.ok && esc) {
     await supabase.from("escalations")
       .update({ status: "notified", notified_at: new Date().toISOString() })
       .eq("id", esc.id);
@@ -322,7 +370,7 @@ async function handleNoAnswer(call: any) {
       `phone in another room), but you know ${name} best — a quick call from you ` +
       `is the right next step.${link}\n— Etta`,
   );
-  if (sent && esc) {
+  if (sent.ok && esc) {
     await supabase.from("escalations")
       .update({ status: "notified", notified_at: new Date().toISOString() })
       .eq("id", esc.id);
@@ -467,9 +515,18 @@ async function handleCompleted(call: any, message: any) {
   body += `\nReply STOP to end texts.`;
 
   const sent = await sendText(await familyPhones(call.senior_id), body);
-  if (sent && summaryRow) {
+  if (summaryRow) {
+    // Record the send cost whether or not every recipient succeeded — a partial
+    // fan-out still costs us for the copies that went out, and pretending
+    // otherwise would understate COGS for exactly the families with the most
+    // recipients, who are the expensive ones.
     await supabase.from("call_summaries")
-      .update({ delivered_at: new Date().toISOString() })
+      .update({
+        delivered_at: sent.ok ? new Date().toISOString() : null,
+        sms_segments: sent.segments || null,
+        sms_recipients: sent.recipients || null,
+        sms_cost_usd: sent.costUsd || null,
+      })
       .eq("id", summaryRow.id);
   }
 }
@@ -576,6 +633,9 @@ async function handleInbound(message: any) {
     ended_reason: `inbound:${message.endedReason ?? "ended"}`,
     transcript: message.artifact?.transcript ?? message.transcript ?? null,
     recording_url: recordingUrl,
+    // Consent calls are pure cost — they happen before anyone is charged, and
+    // for a senior who declines they are never recovered at all.
+    ...providerCost(message),
   }).select("id").single();
 
   const name = senior.preferred_name || senior.first_name;
@@ -701,6 +761,7 @@ Deno.serve(async (req) => {
     ended_reason: endedReason || null,
     transcript,
     recording_url: message.artifact?.recordingUrl ?? message.recordingUrl ?? null,
+    ...providerCost(message),
   }).eq("id", call.id);
 
   // A failed call is a call that didn't happen, and the remedy is the same as
