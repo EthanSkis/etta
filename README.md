@@ -20,6 +20,7 @@ consent, always. Full concept: [`business-description.md`](business-description.
 | `agent/etta-system-prompt.md` | Etta's conversation design — disclosure, tone, question bank, safety, scam protection, revocation |
 | `agent/vapi-assistant.json` | The Vapi assistant definition, incl. structured post-call analysis schema |
 | `docs/launch-runbook.md` | Step-by-step from here to the first real call (accounts, secrets, cron, consent script, legal gate) |
+| `docs/kickstarter-project.md` | Crowdfunding campaign draft — every project-builder field filled in, plus why Kickstarter's rules are a poor fit and which platform to use instead |
 | `*.pdf` / `*.txt` | Market landscape and AI-disclosure-law research |
 
 ## Status
