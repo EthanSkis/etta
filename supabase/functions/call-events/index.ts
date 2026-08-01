@@ -47,6 +47,28 @@ function flagText(f: Flag): string {
   return f.detail ?? f.description ?? f.type ?? "unspecified concern";
 }
 
+// The analysis model doesn't always honor the schema's types: it will answer
+// ate_today with "Yes, a burrito and yogurt" or mood_score with "1". Those are
+// real answers, so coerce rather than discard — dropping them empties the whole
+// chip row and blanks the mood colour for a call that went fine.
+// deno-lint-ignore no-explicit-any
+function toBool(v: any): boolean | null {
+  if (typeof v === "boolean") return v;
+  if (typeof v !== "string") return null;
+  const t = v.trim().toLowerCase();
+  if (!t) return null;
+  if (/^(y|yes|true|taken|did)\b/.test(t)) return true;
+  if (/^(n|no|false|not|none|never|didn'?t|hasn'?t|doesn'?t)\b/.test(t)) return false;
+  return null;
+}
+
+// deno-lint-ignore no-explicit-any
+function toMood(v: any): number | null {
+  const n = typeof v === "number" ? v : parseInt(String(v ?? "").trim(), 10);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(5, Math.max(1, Math.round(n)));
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -295,11 +317,10 @@ async function handleCompleted(call: any, message: any) {
       `A written summary wasn't produced for this call; the transcript is saved.`;
 
   const flags: Flag[] = Array.isArray(structured.flags) ? structured.flags : [];
-  const moodScore: number | null =
-    typeof structured.mood_score === "number" &&
-      structured.mood_score >= 1 && structured.mood_score <= 5
-      ? Math.round(structured.mood_score)
-      : null;
+  const moodScore = toMood(structured.mood_score);
+  const ateToday = toBool(structured.ate_today);
+  const sleptWell = toBool(structured.slept_well);
+  const medsTaken = toBool(structured.meds_taken);
 
   const { data: summaryRow, error: sumErr } = await supabase
     .from("call_summaries")
@@ -308,9 +329,9 @@ async function handleCompleted(call: any, message: any) {
       senior_id: call.senior_id,
       summary: summaryText,
       mood_score: moodScore,
-      ate_today: typeof structured.ate_today === "boolean" ? structured.ate_today : null,
-      slept_well: typeof structured.slept_well === "boolean" ? structured.slept_well : null,
-      meds_taken: typeof structured.meds_taken === "boolean" ? structured.meds_taken : null,
+      ate_today: ateToday,
+      slept_well: sleptWell,
+      meds_taken: medsTaken,
       flags,
       revocation_requested: structured.revocation_requested === true,
       tomorrow_topic: structured.tomorrow_topic || null,
@@ -351,15 +372,9 @@ async function handleCompleted(call: any, message: any) {
     : "🟠";
 
   const chips: string[] = [];
-  if (typeof structured.slept_well === "boolean") {
-    chips.push(`😴 slept ${structured.slept_well ? "well" : "poorly"}`);
-  }
-  if (typeof structured.ate_today === "boolean") {
-    chips.push(`🍽️ ${structured.ate_today ? "ate" : "not eaten yet"}`);
-  }
-  if (typeof structured.meds_taken === "boolean") {
-    chips.push(`💊 ${structured.meds_taken ? "taken" : "not taken"}`);
-  }
+  if (sleptWell !== null) chips.push(`😴 slept ${sleptWell ? "well" : "poorly"}`);
+  if (ateToday !== null) chips.push(`🍽️ ${ateToday ? "ate" : "not eaten yet"}`);
+  if (medsTaken !== null) chips.push(`💊 ${medsTaken ? "taken" : "not taken"}`);
   if (moodScore) chips.push(`Mood ${moodScore}/5`);
 
   const link = senior?.share_token

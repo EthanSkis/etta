@@ -33,6 +33,32 @@ Already provisioned — steps 1, 3 and 4 below are ✅ done:
 — the values live outside this repo. Until then the scheduler answers the cron
 with 401, which is safe and by design.
 
+### 🚨 SMS does not deliver yet — A2P 10DLC (blocker)
+
+Every summary and escalation text so far has come back from Twilio as
+`undelivered`, **error 30034: message from an unregistered A2P 10DLC sender**.
+US carriers block application-to-person SMS on long-code numbers until the
+sender is registered — verifying a number for the trial does *not* help, and
+nothing about it is visible in Etta's own logs, because Twilio accepts the
+message and the carrier rejects it asynchronously.
+
+Voice calls are unaffected: those work today on verified numbers.
+
+To fix, in the Twilio Console:
+
+1. Upgrade off the trial (A2P registration requires a paid account).
+2. Messaging → Regulatory Compliance → **A2P 10DLC**: register a **Brand**
+   (legal business name, address, EIN — or the Sole Proprietor path if you
+   have no EIN) and then a **Campaign**. Use case: customer care /
+   account notifications. Sample messages: paste a real summary text and a
+   real no-answer escalation text.
+3. Attach `+1 762 239 4275` to a **Messaging Service** linked to that campaign.
+
+Until this clears, treat the family-notification half of the product as
+non-functional, and note that `call_summaries.delivered_at` currently means
+"Twilio accepted it", not "the family received it" — the code logs each
+message SID so failures can be traced in the Twilio console.
+
 **Twilio trial caveats:** the account is on trial, so (a) Etta can only call
 or text numbers you've verified (Console → Phone Numbers → Verified Caller
 IDs — add your own cell for the self-pilot), and (b) Twilio plays a short
