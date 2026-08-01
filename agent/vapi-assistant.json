@@ -15,7 +15,7 @@
   "firstMessage": "Hi {{preferred_name}}, it's Etta — your daily check-in companion. I should say, as always: I'm an AI assistant, not a person, calling because {{family_contact}} set this up with you. How are you doing today?",
   "model": {
     "provider": "anthropic",
-    "model": "claude-sonnet-5",
+    "model": "claude-haiku-4-5-20251001",
     "temperature": 0.6,
     "messages": [
       {
