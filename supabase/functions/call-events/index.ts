@@ -18,7 +18,14 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const MAX_ATTEMPTS = 3;        // 1 scheduled call + 2 retries
 const RETRY_DELAY_MINUTES = 30;
+// The introduction call gets fewer, gentler tries than a check-in: a senior
+// who hasn't agreed to anything yet has not agreed to a phone that keeps
+// ringing. After these, Etta stops and the family is told.
+const MAX_SETUP_ATTEMPTS = 3;
+const SETUP_RETRY_DELAY_MINUTES = 45;
 const DEFAULT_FROM_NUMBER = "+17622394275"; // "Etta outbound" — same number Etta calls from
+const ETTA_NUMBER_DISPLAY = "(762) 239-4275";
+const SITE = "https://www.ettacalls.com";
 
 // The family page is served from our own domain, not the Supabase function
 // URL: Supabase rewrites text/html to text/plain on *.supabase.co, so the
@@ -189,6 +196,61 @@ function timeSpeech(t: string): string {
   const part = h24 < 12 ? "in the morning" : h24 < 17 ? "in the afternoon" : "in the evening";
   const h = h24 % 12 || 12;
   return m === 0 ? `${h} ${part}` : `${h}:${String(m).padStart(2, "0")} ${part}`;
+}
+
+// Introduction calls (and their retries) only ever land in daylight, in the
+// senior's own timezone. A retry 45 minutes after a 7:30pm attempt would
+// otherwise ring an older person's phone at quarter past eight and again at
+// nine — from a number they don't know, about something they didn't ask for.
+const SETUP_EARLIEST_HOUR = 8;
+const SETUP_LATEST_HOUR = 20;
+
+function tzOffsetMs(at: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone, hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(at);
+  const get = (t: string) => parseInt(parts.find((p) => p.type === t)?.value ?? "0", 10);
+  return Date.UTC(
+    get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"),
+  ) - at.getTime();
+}
+
+// A wall-clock time in the senior's timezone → the UTC instant it names. The
+// second pass corrects the offset when the request straddles a DST change.
+function zonedToUtc(date: string, time: string, timeZone: string): Date {
+  const [y, mo, d] = date.split("-").map((n) => parseInt(n, 10));
+  const [h, mi] = time.split(":").map((n) => parseInt(n, 10));
+  const naive = Date.UTC(y, mo - 1, d, h, mi);
+  let ts = naive - tzOffsetMs(new Date(naive), timeZone);
+  ts = naive - tzOffsetMs(new Date(ts), timeZone);
+  return new Date(ts);
+}
+
+function localHour(at: Date, timeZone: string): number {
+  return parseInt(
+    new Intl.DateTimeFormat("en-US", { timeZone, hourCycle: "h23", hour: "2-digit" })
+      .format(at),
+    10,
+  );
+}
+
+function localDateAt(at: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(at);
+}
+
+// The same instant, or the next civilised hour if it isn't one.
+function withinCallingHours(at: Date, timeZone: string): Date {
+  const hour = localHour(at, timeZone);
+  if (hour >= SETUP_EARLIEST_HOUR && hour < SETUP_LATEST_HOUR) return at;
+  const today = localDateAt(at, timeZone);
+  if (hour < SETUP_EARLIEST_HOUR) return zonedToUtc(today, "09:00", timeZone);
+  const next = new Date(new Date(`${today}T12:00:00Z`).getTime() + 864e5)
+    .toISOString().slice(0, 10);
+  return zonedToUtc(next, "09:00", timeZone);
 }
 
 function localDate(timeZone: string): string {
@@ -474,6 +536,165 @@ async function handleCompleted(call: any, message: any) {
   }
 }
 
+interface ConsentSenior {
+  id: string;
+  family_id: string;
+  first_name: string;
+  preferred_name: string | null;
+  share_token: string;
+  schedules?: { call_time: string; active: boolean }[];
+}
+
+// The setup assistant's structured verdict. Anything not stated here is not
+// evidence of anything — see agent/vapi-setup-assistant.json for the schema
+// this mirrors, and keep the two in step.
+interface SetupAnalysis {
+  reached_senior?: boolean;
+  wrong_person?: boolean;
+  consent_given?: boolean;
+  consent_declined?: boolean;
+  consent_quote?: string | null;
+  call_back_hours?: number | null;
+}
+
+// What the setup call decided, applied to the database and told to the family.
+// One function for both directions: a yes given to Etta on a call she placed
+// is the same yes as one given on a call the senior placed — same disclosure,
+// same recording, same right to refuse — so it must produce the same record.
+async function applyConsentOutcome(
+  senior: ConsentSenior,
+  structured: SetupAnalysis,
+  recordingUrl: string | null,
+  direction: "inbound" | "outbound",
+) {
+  const name = senior.preferred_name || senior.first_name;
+  const sched = (senior.schedules ?? []).find((s) => s.active);
+  const speech = sched ? timeSpeech(sched.call_time) : "the time you chose";
+  const method = direction === "inbound"
+    ? "senior_inbound_setup_call"
+    : "senior_outbound_setup_call";
+
+  if (structured.consent_given === true) {
+    await supabase.from("consent_events").insert({
+      senior_id: senior.id,
+      event: "granted",
+      method,
+      recording_url: recordingUrl,
+      notes: structured.consent_quote ?? "Senior agreed on the recorded setup call.",
+    });
+    await supabase.from("seniors").update({ status: "active" }).eq("id", senior.id);
+    // Any introduction call still on the books is now pointless.
+    await supabase.from("calls")
+      .update({ status: "canceled", ended_reason: "consent_granted" })
+      .eq("senior_id", senior.id).eq("kind", "setup").eq("status", "scheduled");
+    const link = `${FAM_LINK_BASE}/${senior.share_token}`;
+    await sendText(
+      await familyPhones(senior.id),
+      // First recurring message of the program: carries the full disclosure.
+      `🟢 ${name} just said yes to Etta! Check-ins start tomorrow around ` +
+        `${speech}. You'll get a note here after each call — and the full ` +
+        `picture any time: ${link}\n— Etta\n` +
+        `Msg frequency varies. Msg & data rates may apply. ` +
+        `Reply STOP to opt out, HELP for help.`,
+    );
+    return;
+  }
+
+  if (structured.consent_declined === true) {
+    await supabase.from("consent_events").insert({
+      senior_id: senior.id,
+      event: "revoked",
+      method,
+      recording_url: recordingUrl,
+      notes: structured.consent_quote ?? "Senior declined on the recorded setup call.",
+    });
+    // Declining is a decision, not a pause: the number stops being called at
+    // all, including by any introduction call still on the books.
+    await supabase.from("seniors").update({ status: "revoked" }).eq("id", senior.id);
+    await supabase.from("calls")
+      .update({ status: "canceled", ended_reason: "senior_declined" })
+      .eq("senior_id", senior.id).eq("status", "scheduled");
+    await cancelSubscription(senior.family_id, "senior_declined_consent");
+    await sendText(
+      await familyPhones(senior.id),
+      `Etta update: ${name} decided not to start the check-in calls — and that's ` +
+        `completely okay; nothing will happen and you haven't been charged. ` +
+        `Your subscription is canceled. If they ever change their mind, they can ` +
+        `call Etta themselves at ${ETTA_NUMBER_DISPLAY}. — Etta`,
+    );
+    return;
+  }
+
+  // Neither a yes nor a no. Ambiguity is not consent, so nothing starts —
+  // but the family gets a real next step rather than silence.
+  const hours = typeof structured.call_back_hours === "number" ? structured.call_back_hours : 0;
+  const askedLater = hours > 0;
+  if (askedLater) await scheduleSetupRetry(senior.id, Math.min(72, hours) * 60, 1);
+  await sendText(
+    await familyPhones(senior.id),
+    askedLater
+      ? `Etta update: she reached ${name}, who asked her to try again later — so ` +
+        `Etta will. Nothing starts until ${name} says yes, and you haven't been ` +
+        `charged. — Etta`
+      : `Etta update: the call with ${name} didn't end in a clear yes, so nothing ` +
+        `starts yet and you haven't been charged. When they're ready, they can ` +
+        `call Etta at ${ETTA_NUMBER_DISPLAY} — or you can ask her to try again ` +
+        `from your setup link. — Etta`,
+  );
+}
+
+// Book another introduction call. Used for "call me back after lunch" and for
+// no-answer retries; the partial unique index guarantees only one is ever
+// outstanding, so a duplicate here is a no-op rather than a second ringing.
+async function scheduleSetupRetry(
+  seniorId: string,
+  delayMinutes: number,
+  attemptNumber: number,
+): Promise<void> {
+  const { data: senior } = await supabase.from("seniors")
+    .select("timezone, status").eq("id", seniorId).maybeSingle();
+  if (!senior || senior.status !== "pending_consent") return;
+  const tz = senior.timezone as string;
+  const at = withinCallingHours(new Date(Date.now() + delayMinutes * 60_000), tz);
+  const { error } = await supabase.from("calls").insert({
+    senior_id: seniorId,
+    kind: "setup",
+    scheduled_for: at.toISOString(),
+    scheduled_local_date: localDateAt(at, tz),
+    attempt_number: attemptNumber,
+  });
+  if (error && !error.message.includes("duplicate")) {
+    console.error("setup retry insert failed:", error.message);
+  }
+}
+
+// The introduction call rang out, or reached the wrong person. Try again a
+// couple of times, then stop and hand the family the two things that still
+// work: their parent can call Etta, or they can book another attempt.
+// deno-lint-ignore no-explicit-any
+async function handleSetupNoAnswer(call: any) {
+  if (call.attempt_number < MAX_SETUP_ATTEMPTS) {
+    await scheduleSetupRetry(
+      call.senior_id,
+      SETUP_RETRY_DELAY_MINUTES,
+      call.attempt_number + 1,
+    );
+    return;
+  }
+  const { data: senior } = await supabase.from("seniors")
+    .select("first_name, preferred_name, status").eq("id", call.senior_id).maybeSingle();
+  if (!senior || senior.status !== "pending_consent") return;
+  const name = senior.preferred_name || senior.first_name;
+  await sendText(
+    await familyPhones(call.senior_id),
+    `Etta tried ${name} ${MAX_SETUP_ATTEMPTS} times and didn't reach them, so ` +
+      `she's stopped trying — nothing has started and you haven't been charged. ` +
+      `Two ways forward: ${name} can call Etta any time at ${ETTA_NUMBER_DISPLAY} ` +
+      `(worth saving in their phone first: ${SITE}/save), or you can ask Etta to ` +
+      `try again from your setup link. — Etta`,
+  );
+}
+
 // Someone dialed Etta's number: decide which Etta answers, with what context.
 // deno-lint-ignore no-explicit-any
 async function handleAssistantRequest(message: any): Promise<Response> {
@@ -578,8 +799,6 @@ async function handleInbound(message: any) {
     recording_url: recordingUrl,
   }).select("id").single();
 
-  const name = senior.preferred_name || senior.first_name;
-
   if (senior.status === "active") {
     // A callback from an active senior: run the normal post-call processing
     // so anything they said (including "stop calling me") is honored.
@@ -588,47 +807,12 @@ async function handleInbound(message: any) {
   }
 
   // Pending consent: the setup assistant's analysis decides what happened.
-  const structured = message?.analysis?.structuredData ?? {};
-  if (structured.consent_given === true) {
-    await supabase.from("consent_events").insert({
-      senior_id: senior.id,
-      event: "granted",
-      method: "senior_inbound_setup_call",
-      recording_url: recordingUrl,
-      notes: structured.consent_quote ??
-        message?.analysis?.summary ?? "Senior agreed on recorded inbound setup call.",
-    });
-    await supabase.from("seniors").update({ status: "active" }).eq("id", senior.id);
-    const sched = (senior.schedules as { call_time: string; active: boolean }[] ?? [])
-      .find((s) => s.active);
-    const speech = sched ? timeSpeech(sched.call_time) : "the time you chose";
-    const link = `${FAM_LINK_BASE}/${senior.share_token}`;
-    await sendText(
-      await familyPhones(senior.id),
-      // First recurring message of the program: carries the full disclosure.
-      `🟢 ${name} just said yes to Etta! Check-ins start tomorrow around ` +
-        `${speech}. You'll get a note here after each call — and the full ` +
-        `picture any time: ${link}\n— Etta\n` +
-        `Msg frequency varies. Msg & data rates may apply. ` +
-        `Reply STOP to opt out, HELP for help.`,
-    );
-  } else if (structured.consent_declined === true) {
-    await cancelSubscription(senior.family_id, "senior_declined_consent");
-    await sendText(
-      await familyPhones(senior.id),
-      `Etta update: ${name} decided not to start the check-in calls — and that's ` +
-        `completely okay; nothing will happen and you haven't been charged. ` +
-        `Your subscription is canceled. If they change their mind, just call ` +
-        `Etta together again from their phone. — Etta`,
-    );
-  } else {
-    await sendText(
-      await familyPhones(senior.id),
-      `Etta update: someone called from ${name}'s phone, but it didn't end in ` +
-        `a clear yes from ${name}, so nothing starts yet. When you're ready, ` +
-        `call Etta together again from their phone. — Etta`,
-    );
-  }
+  await applyConsentOutcome(
+    senior as unknown as ConsentSenior,
+    message?.analysis?.structuredData ?? {},
+    recordingUrl,
+    "inbound",
+  );
 }
 
 Deno.serve(async (req) => {
@@ -693,6 +877,7 @@ Deno.serve(async (req) => {
     typeof reached === "boolean" ? reached : null,
   );
 
+  const recordingUrl = message.artifact?.recordingUrl ?? message.recordingUrl ?? null;
   await supabase.from("calls").update({
     status,
     started_at: message.startedAt ?? call.started_at,
@@ -700,8 +885,40 @@ Deno.serve(async (req) => {
     duration_seconds: durationSeconds || null,
     ended_reason: endedReason || null,
     transcript,
-    recording_url: message.artifact?.recordingUrl ?? message.recordingUrl ?? null,
+    recording_url: recordingUrl,
   }).eq("id", call.id);
+
+  // The introduction call Etta placed herself: its only product is a decision,
+  // so it never becomes a summary or a day in the family's history.
+  if (call.kind === "setup") {
+    const structured: SetupAnalysis = message.analysis?.structuredData ?? {};
+    // Whoever picked up wasn't the person Etta is allowed to talk to about
+    // any of this. She'll have said nothing and moved on; try again later.
+    const wrongPerson = structured.wrong_person === true;
+    // A no is honored even if the call was too short or too odd to classify
+    // as completed. Getting this backwards would ring the phone of someone
+    // who has just refused, which is the one thing this feature must never do.
+    const declined = structured.consent_declined === true;
+    if (declined || (status === "completed" && !wrongPerson)) {
+      const { data: senior } = await supabase.from("seniors")
+        .select(
+          "id, family_id, first_name, preferred_name, share_token, " +
+            "schedules:call_schedules(call_time, active)",
+        )
+        .eq("id", call.senior_id).maybeSingle();
+      if (senior) {
+        await applyConsentOutcome(
+          senior as unknown as ConsentSenior,
+          structured,
+          recordingUrl,
+          "outbound",
+        );
+      }
+    } else {
+      await handleSetupNoAnswer(call);
+    }
+    return json({ ok: true, status, kind: "setup" });
+  }
 
   // A failed call is a call that didn't happen, and the remedy is the same as
   // for no answer: try again shortly, and tell the family if we run out of

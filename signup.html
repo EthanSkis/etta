@@ -157,18 +157,45 @@
 .signup-note{font-size:13px;color:var(--ink-soft);margin-top:14px;line-height:1.55;text-align:center}
 .signup-note b{color:var(--ink)}
 
-/* ---------- the "now call Etta" screen ---------- */
+/* ---------- the "Etta will ask them herself" screen ---------- */
 .next-step{max-width:600px;margin:0 auto;background:var(--card);
   border:1px solid var(--line);border-radius:24px;padding:34px 30px;text-align:center;
   box-shadow:0 30px 60px -34px rgba(46,32,20,.35)}
-.next-step .bignum{display:inline-block;font-family:var(--serif);font-size:36px;
-  font-weight:600;color:var(--terra-deep);margin:14px 0 4px;text-decoration:none;letter-spacing:-.02em}
 .next-step ol{text-align:left;margin:22px auto 0;max-width:27em;padding-left:22px}
 .next-step ol li{margin:9px 0;color:var(--ink-soft)}
 .next-step ol li b{color:var(--ink)}
 
+/* display:flex would otherwise beat the UA's [hidden] rule and leave the
+   booking buttons on screen after the call is booked. */
+.next-step [hidden]{display:none}
+.ns-actions{display:flex;flex-direction:column;gap:10px;margin:22px auto 0;max-width:24em}
+.ns-actions .btn{width:100%}
+.btn.link{background:none;border:none;color:var(--ink-soft);font-size:14px;
+  text-decoration:underline;cursor:pointer;padding:6px;box-shadow:none}
+.when-panel{margin:16px auto 0;max-width:24em;text-align:left;
+  background:var(--paper-2,rgba(0,0,0,.02));border:1px solid var(--line);
+  border-radius:16px;padding:16px}
+.when-panel .sf-lab{display:block;font-size:13px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+.when-row{display:flex;gap:10px}
+.when-row label{flex:1}
+.when-panel select{width:100%}
+.when-panel .btn{width:100%;margin-top:12px}
+/* The booked/booking state: one calm line of truth, and a way to change it. */
+.ns-state{margin:22px auto 0;max-width:26em;background:rgba(126,150,120,.12);
+  border:1px solid rgba(126,150,120,.35);border-radius:16px;padding:16px 18px}
+.ns-state b{display:block;font-family:var(--serif);font-size:19px;margin-bottom:4px}
+.ns-state p{font-size:14px;color:var(--ink-soft);line-height:1.6;margin:0}
+.ns-sub{margin:28px auto 0;max-width:27em;padding-top:22px;border-top:1px solid var(--line)}
+.ns-sub h3{font-family:var(--serif);font-size:19px;margin:0 0 6px}
+.ns-sub p{font-size:14px;color:var(--ink-soft);line-height:1.6;margin:0 0 12px}
+.ns-sub p a{color:var(--terra-deep)}
+.ns-alt{margin-top:22px;font-size:13.5px;color:var(--ink-soft);line-height:1.6}
+.ns-alt a{color:var(--terra-deep)}
+
 @media(max-width:540px){
   .signup-card,.next-step{padding:26px 20px 24px;border-radius:20px}
+  .when-row{flex-direction:column}
 }
 </style>
 </head>
@@ -195,7 +222,7 @@
     <div class="wrap">
       <div class="sec-kicker">Get started</div>
       <h1 class="page-title">Two minutes for you.<br>One honest yes from them.</h1>
-      <p class="sec-lede">A few small questions, one at a time. Then — together with your parent — you'll call Etta from their phone, and she'll ask for their yes. Nothing starts without it.</p>
+      <p class="sec-lede">A few small questions, one at a time. Then Etta rings your parent herself, explains what she is, and asks them for their yes — you don't have to be in the room, and nothing starts without it.</p>
     </div>
   </div>
 
@@ -318,16 +345,47 @@
       </form>
 
       <div class="next-step" id="signup-done" hidden>
-        <div class="sec-kicker">One step left — and it's <b id="done-name">their</b> step</div>
-        <h2 style="margin-top:6px">Now call Etta, together.</h2>
-        <a class="bignum" id="etta-tel" href="tel:+17622394275">(762) 239-4275</a>
-        <p class="sec-lede" style="margin-top:6px">From <b><span id="done-name2">your parent</span>'s phone</b>, with you beside them or on the line.</p>
+        <div class="sec-kicker">One conversation left — and it's <b class="who-poss">your parent's</b></div>
+        <h2 style="margin-top:6px">Etta will ask <span class="who">your parent</span> directly.</h2>
+        <p class="sec-lede" style="margin-top:6px">She rings once, says plainly that she's an AI, explains the daily call, and asks for a yes in <span class="who-poss">your parent's</span> own words. You don't have to be there — but you're welcome to be.</p>
+
+        <div class="ns-actions" id="ns-choices">
+          <button class="btn" type="button" id="call-now">Have Etta call <span class="who">your parent</span> now</button>
+          <button class="btn ghost" type="button" id="call-later">Pick a time instead</button>
+        </div>
+
+        <div class="when-panel" id="when-panel" hidden>
+          <div class="when-row">
+            <label><span class="sf-lab">Day</span>
+              <select id="when-day"></select></label>
+            <label><span class="sf-lab">Time <em>(their time)</em></span>
+              <select id="when-time"></select></label>
+          </div>
+          <button class="btn" type="button" id="when-confirm">Book the call</button>
+        </div>
+
+        <div class="ns-state" id="ns-state" hidden>
+          <b id="ns-state-title"></b>
+          <p id="ns-state-body"></p>
+          <button class="btn link" type="button" id="ns-change">Change this</button>
+        </div>
+
+        <p class="signup-msg" id="ns-msg" role="status"></p>
+
         <ol>
-          <li>Etta answers, says hello, and explains she's an AI — plainly.</li>
-          <li>She describes the daily call and asks <b>your parent</b> for their yes, in their own voice, on a recorded line.</li>
-          <li>If they say yes: first call tomorrow at the time you chose, and you'll get a text after every conversation. If they say no — nothing happens, ever. That's the deal.</li>
+          <li>Etta says who — and what — she is, in her first breath.</li>
+          <li>She explains the daily call and asks <b class="who">your parent</b> for a yes, on a recorded line. A no is honoured on the spot.</li>
+          <li>Yes → first check-in the next day at the time you chose, and a text to you after every call. No → nothing happens, ever, and your card is never charged.</li>
         </ol>
-        <p class="signup-note">No rush — this works whenever you're next together or on the phone with them.</p>
+
+        <div class="ns-sub">
+          <h3>So it isn't a stranger's number ringing</h3>
+          <p>Etta always calls from the same number. Send <span class="who">your parent</span> a heads-up from your own phone — it carries a link that saves Etta as a contact, so her name comes up instead of ten digits nobody recognises.</p>
+          <a class="btn ghost" id="heads-up-link" href="#">Text <span class="who">your parent</span> a heads-up</a>
+          <p style="margin-top:12px"><a href="/save" target="_blank" rel="noopener">See the page they'll land on →</a></p>
+        </div>
+
+        <p class="ns-alt">Rather do it together? Etta can be called instead, from <span class="who-poss">your parent's</span> own phone, any time: <a href="tel:+17622394275" id="etta-tel">(762) 239-4275</a>. Same conversation, same recorded yes.</p>
       </div>
 
     </div>
@@ -362,6 +420,7 @@
 (function () {
   "use strict";
   var SIGNUP_URL = "https://kkqgxojxsfqgfpzdyzjv.supabase.co/functions/v1/signup";
+  var SETUP_URL = "https://kkqgxojxsfqgfpzdyzjv.supabase.co/functions/v1/setup-call";
 
   var TZ = [
     ["Eastern time", "America/New_York"],
@@ -704,14 +763,195 @@
       });
   });
 
-  /* Back from Stripe: ?started=1&who=Margaret → the "now call Etta" screen. */
+  /* ---------------------------------------------------------------------
+     Back from Stripe: ?started=1&who=Margaret&t=<setup_token>.
+     The old screen ended here with "now call Etta, together" — which meant
+     the family had to be with their parent before anything could start. Now
+     they can hand the introduction to Etta: one tap for now, or a time in
+     their parent's own timezone.
+     --------------------------------------------------------------------- */
   var params = new URLSearchParams(window.location.search);
+  var setupToken = (params.get("t") || "").replace(/[^a-f0-9]/g, "").slice(0, 64);
+  var parentName = (params.get("who") || "your parent").slice(0, 80);
+  var setupInfo = null;
+
+  function fillNames(name) {
+    parentName = name;
+    var poss = /s$/i.test(name) ? name + "'" : name + "'s";
+    each(document.querySelectorAll(".who"), function (el) { el.textContent = name; });
+    each(document.querySelectorAll(".who-poss"), function (el) { el.textContent = poss; });
+  }
+
+  function each(list, fn) { Array.prototype.forEach.call(list, fn); }
+
+  function setupApi(action, extra) {
+    var body = { token: setupToken, action: action };
+    for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) body[k] = extra[k];
+    return fetch(SETUP_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error(data.error || "Something went wrong — please try again.");
+        return data;
+      });
+    });
+  }
+
+  var nsChoices = document.getElementById("ns-choices");
+  var nsState = document.getElementById("ns-state");
+  var nsStateTitle = document.getElementById("ns-state-title");
+  var nsStateBody = document.getElementById("ns-state-body");
+  var nsMsg = document.getElementById("ns-msg");
+  var whenPanel = document.getElementById("when-panel");
+  var whenDay = document.getElementById("when-day");
+  var whenTime = document.getElementById("when-time");
+
+  /* The heads-up text goes from the family's OWN phone, so the first thing
+     their parent sees about Etta comes from a number they already trust —
+     and it carries the link that saves Etta's number before it ever rings. */
+  function wireHeadsUp(info) {
+    var link = document.getElementById("heads-up-link");
+    var apple = /iP(hone|ad|od)|Macintosh/.test(navigator.userAgent);
+    link.href = "sms:" + (info.parent_phone || "") + (apple ? "&" : "?") +
+      "body=" + encodeURIComponent(info.heads_up_text || "");
+  }
+
+  /* changeable is false once Etta is actually on the phone: there is nothing
+     honest to offer at that point except waiting for the text. */
+  function showState(title, body, changeable) {
+    nsChoices.hidden = true;
+    whenPanel.hidden = true;
+    nsStateTitle.textContent = title;
+    nsStateBody.textContent = body;
+    document.getElementById("ns-change").hidden = !changeable;
+    nsState.hidden = false;
+  }
+
+  function showChoices() {
+    nsState.hidden = true;
+    whenPanel.hidden = true;
+    nsChoices.hidden = false;
+  }
+
+  function render(info) {
+    setupInfo = info;
+    if (info.name) fillNames(info.name);
+    wireHeadsUp(info);
+    nsMsg.textContent = "";
+    var name = info.name || parentName;
+    if (info.state === "calling") {
+      showState("Etta is calling " + name + " now.",
+        "Their phone should be ringing. If they miss it, Etta tries twice more, " +
+        "45 minutes apart, and then stops. Either way you'll get a text telling " +
+        "you exactly what happened.", false);
+    } else if (info.state === "scheduled") {
+      showState("Etta will call " + name + " " + (info.when_speech || "shortly") + ".",
+        "That's " + name + "'s own local time. You'll get a text as soon as she " +
+        "has an answer — and nothing is charged until it's a yes.", true);
+    } else if (info.state === "done") {
+      showState(name + " has already said yes.",
+        "The check-in calls are set up. Watch for Etta's text after the first one.",
+        false);
+    } else if (info.state === "closed") {
+      showState("This setup is closed.",
+        "Nothing is scheduled and nothing will be charged. Start again at " +
+        "ettacalls.com/signup whenever you like.", false);
+    } else {
+      showChoices();
+      if (info.state === "attempted") {
+        nsMsg.textContent = "Etta has tried before and didn't reach " + name +
+          " — you can send her again whenever suits.";
+      }
+    }
+  }
+
+  /* Day and time are drawn in the SENIOR'S timezone, from the server's clock,
+     because the person booking is often in a different one. */
+  function buildWhenPickers(info) {
+    var today = info.local_today;
+    whenDay.innerHTML = "";
+    for (var d = 0; d < 7; d++) {
+      var date = new Date(today + "T12:00:00Z");
+      date.setUTCDate(date.getUTCDate() + d);
+      var iso = date.toISOString().slice(0, 10);
+      var label = d === 0 ? "Today" : d === 1 ? "Tomorrow"
+        : date.toLocaleDateString(undefined, { weekday: "long", timeZone: "UTC" });
+      whenDay.appendChild(new Option(label, iso));
+    }
+    whenDay.onchange = buildTimes;
+    buildTimes();
+
+    function buildTimes() {
+      var first = info.earliest_hour || 8;
+      var last = info.latest_hour || 20;
+      var isToday = whenDay.value === today;
+      var nowMins = parseInt(info.local_now.slice(0, 2), 10) * 60 +
+        parseInt(info.local_now.slice(3, 5), 10);
+      whenTime.innerHTML = "";
+      for (var mins = first * 60; mins < last * 60; mins += 30) {
+        if (isToday && mins < nowMins + 10) continue;
+        var h = Math.floor(mins / 60), m = mins % 60;
+        var value = (h < 10 ? "0" : "") + h + ":" + (m ? "30" : "00");
+        var label = (h % 12 || 12) + ":" + (m ? "30" : "00") + (h < 12 ? "am" : "pm");
+        whenTime.appendChild(new Option(label, value));
+      }
+      if (!whenTime.options.length) {
+        whenTime.appendChild(new Option("No times left today", ""));
+      }
+    }
+  }
+
+  function setupError(err) {
+    nsMsg.textContent = err.message;
+    showChoices();
+  }
+
+  document.getElementById("call-now").addEventListener("click", function () {
+    var btn = this;
+    btn.disabled = true;
+    nsMsg.textContent = "";
+    setupApi("now").then(render).catch(setupError)
+      .then(function () { btn.disabled = false; });
+  });
+
+  document.getElementById("call-later").addEventListener("click", function () {
+    whenPanel.hidden = !whenPanel.hidden;
+    if (!whenPanel.hidden && setupInfo) buildWhenPickers(setupInfo);
+  });
+
+  document.getElementById("when-confirm").addEventListener("click", function () {
+    if (!whenTime.value) return;
+    var btn = this;
+    btn.disabled = true;
+    setupApi("schedule", { local_date: whenDay.value, local_time: whenTime.value })
+      .then(render).catch(setupError)
+      .then(function () { btn.disabled = false; });
+  });
+
+  document.getElementById("ns-change").addEventListener("click", function () {
+    setupApi("cancel").then(render).catch(setupError);
+  });
+
   if (params.get("started")) {
-    var who = (params.get("who") || "your parent").slice(0, 80);
-    document.getElementById("done-name").textContent = who + "'s";
-    document.getElementById("done-name2").textContent = who;
+    fillNames(parentName);
     form.hidden = true;
     done.hidden = false;
+    if (setupToken) {
+      setupApi("status").then(render).catch(function () {
+        /* The status call is the only thing that knows the parent's timezone,
+           so without it the honest move is to hide the booking controls and
+           leave the family the route that never needed us: their parent
+           calling Etta. */
+        nsChoices.hidden = true;
+        nsMsg.textContent = "We couldn't load your setup just now. " +
+          parentName + " can call Etta directly on (762) 239-4275, or reload this page.";
+      });
+    } else {
+      nsChoices.hidden = true;
+      nsMsg.textContent = parentName + " can call Etta on (762) 239-4275 to finish setting up.";
+    }
   } else if (params.get("canceled")) {
     msg.textContent = "Checkout canceled — nothing was charged. Your details are still here.";
     steps.forEach(function (s) { s.classList.add("show"); });

@@ -10,7 +10,7 @@ Already provisioned — steps 1, 3 and 4 below are ✅ done:
 | Thing | Value |
 |---|---|
 | Vapi assistant "Etta" | `d7f28f40-69a4-4c85-ad22-512f39a14dc8` (claude-haiku-4-5, Clara voice, webhook + secret set) |
-| Vapi assistant "Etta (setup)" | `0089b42e-799e-42c5-878a-2478387ae1de` (claude-haiku-4-5) — answers inbound consent calls |
+| Vapi assistant "Etta (setup)" | `0089b42e-799e-42c5-878a-2478387ae1de` (claude-haiku-4-5) — answers inbound consent calls *and* runs the outbound introduction call. Source of truth: `agent/vapi-setup-assistant.json` |
 | ⚠️ Patching assistants | Vapi PATCH **replaces** a nested object wholesale: sending `{"model":{"model":"…"}}` silently drops the system prompt and temperature. Always send the complete `model` object (provider, model, temperature, messages). |
 | Twilio number | `+1 762 239 4275` ("Etta outbound", imported into Vapi) |
 | Vapi phone number id | `bf43dc1e-9d25-400c-87ef-607a51641419` |
@@ -124,16 +124,29 @@ account removes both.
 ## How the pieces fit
 
 ```
+signup form ─▶ edge fn: signup ─▶ Stripe Checkout ─▶ back to /signup?started=1&t=…
+                                                        │
+                          "call her now" / "at 4pm" ────┘
+                                   ▼
+                       edge fn: setup-call
+                         books a calls row (kind='setup'), places it at once
+                         or leaves it for the cron ─▶ Etta introduces herself
+                                                       (agent/etta-setup-prompt.md)
+                         a yes ─▶ senior 'active', schedules live
+                         a no  ─▶ senior 'revoked', subscription canceled
+
 cron (every 10 min)
   └─▶ edge fn: place-due-calls
         reads call_schedules (senior-local time), checks consent,
         creates a `calls` row, POSTs to Vapi ─▶ Vapi + Twilio dial the senior
+        also places due kind='setup' rows (introduction + its retries)
                                                   │  Etta talks (agent/etta-system-prompt.md)
                                                   ▼
       edge fn: call-events  ◀── Vapi end-of-call report (transcript + analysis)
         stores outcome + call_summaries
         texts the family note (Twilio SMS, from Etta's own number)
         no answer → retry in 30 min (×3) → escalation text to contact chain
+        setup call → consent applied (either direction), or retried ×3 at 45 min
         "stop calling me" → consent revoked, schedules off, family told
 ```
 
@@ -181,6 +194,31 @@ stored with `delivered_at` null and no text goes out.
 3. Save the returned assistant `id` as `VAPI_ASSISTANT_ID`, and the imported
    phone number's `id` as `VAPI_PHONE_NUMBER_ID` (step 2).
 
+The **setup assistant** works the same way from `agent/vapi-setup-assistant.json`
+(system message from `agent/etta-setup-prompt.md`). It already exists live as
+`0089b42e-…`, so PATCH rather than POST — and send the whole `model` object,
+per the warning above. Its id can be overridden with the
+`VAPI_SETUP_ASSISTANT_ID` secret; the default is baked into `call-events`,
+`place-due-calls` and `setup-call`.
+
+### Shipping the introduction-call change
+
+Order matters, and one of these steps is a foot-gun:
+
+1. **Run `supabase/migrations/20260801170000_setup_call_by_etta.sql` first.**
+   It adds `calls.kind` and `seniors.setup_token`. The updated `signup`
+   function selects `setup_token` on insert, so deploying it against a
+   database without that column fails every signup — same shape of mistake as
+   the `sms_consent` migration.
+2. PATCH the setup assistant with the v2 prompt and the new structured schema
+   (`wrong_person`, `call_back_hours`). `call-events` reads those fields; an
+   assistant still on the v1 schema simply never sets them, which degrades to
+   "no clear yes" — safe, but the introduction call can't tell a wrong number
+   from a refusal until it's patched.
+3. `supabase functions deploy setup-call call-events place-due-calls signup fam`.
+4. Deploy the site (`save.html`, `etta.vcf`, the new setup screen).
+5. Register CNAM on the Twilio number (see "The caller ID problem" below).
+
 ## 4. Schedule the cron
 
 In the Supabase dashboard (SQL editor), enable `pg_cron` + `pg_net`
@@ -209,24 +247,73 @@ acceptable for now; move it to Vault when convenient.)
 
 The live flow (no founder in the loop):
 
-1. Family fills **ettacalls.com/signup.html** → `signup` edge function creates
-   family + senior (`pending_consent`) + daily schedule. No call can happen yet.
-2. The senior — usually with family beside them — **calls Etta's number from
-   their own phone**. The number's inbound webhook (`assistant-request` in
-   `call-events`) recognizes the caller and routes them to the **setup
-   assistant** (`agent/etta-setup-prompt.md`), which explains everything and
-   asks for their personal yes on the recorded line.
-3. A clear yes → consent_events row (with the recording URL as evidence),
-   senior flips `active`, family gets the 🟢 text with their family-page link,
-   and the next morning's cron places the first daily call. A no → nothing
-   starts, family is told kindly. Unclear → nothing starts, family is told.
-4. Callers with unknown numbers get a polite generic Etta; active seniors who
+1. Family fills **ettacalls.com/signup** → `signup` edge function creates
+   family + senior (`pending_consent`) + daily schedule, and hands back a
+   Stripe Checkout URL carrying the senior's `setup_token`. No check-in call
+   can happen yet.
+2. Back from Checkout, the family lands on the setup screen and chooses how
+   the introduction happens:
+   - **"Have Etta call them now"** → `setup-call` creates a `calls` row with
+     `kind='setup'` and places it through Vapi immediately (seconds, not the
+     next cron tick).
+   - **"Pick a time"** → same row, `scheduled_for` a wall-clock time in the
+     *senior's* timezone (08:00–20:00, ≤14 days out); `place-due-calls`
+     places it when it comes due.
+   - **Neither** → the original route is still right there: the senior calls
+     Etta's number themselves, with family beside them or not.
+3. Etta runs the **setup conversation** (`agent/etta-setup-prompt.md`,
+   assistant `Etta (setup)`). Outbound she speaks first, and her opening line
+   is the AI disclosure plus "am I speaking with Margaret?" — she says nothing
+   about the family or the signup until she knows who picked up.
+4. A clear yes → `consent_events` row (with the recording URL as evidence),
+   senior flips `active`, any outstanding setup call is canceled, the family
+   gets the 🟢 text with their family-page link, and the next morning's cron
+   places the first daily call. A no → senior flips `revoked` (so nothing
+   ever calls that number again), subscription canceled, family told kindly.
+   Unclear, or "ring me after lunch" → nothing starts, and Etta books one
+   more attempt if a time was named.
+5. No answer on the introduction call → retried twice more, 45 minutes apart,
+   then Etta stops and texts the family the two routes that still work. Calls
+   are capped at `MAX_SETUP_CALLS` (8) per senior across all requests, so a
+   leaked setup token cannot be turned into a ringing phone.
+6. Callers with unknown numbers get a polite generic Etta; active seniors who
    call the number back get the daily-companion Etta with their context (and
    anything they say — including "stop calling me" — is honored as usual).
 
-Why inbound: a senior-initiated call needs no prior consent to place, which
-neatly resolves the TCPA chicken-and-egg of "calling to ask permission to
-call." Confirm this reading in the attorney review (section 7).
+**What changed and why it matters legally.** Until now every call Etta placed
+was to someone who had already consented, because the consent call itself was
+inbound. That was tidy, but it made the family's physical presence a
+prerequisite for finishing signup, and families were paying and then waiting
+days for a Sunday visit. Etta now places exactly one call before consent
+exists — the call whose entire purpose is to ask — at the request of the
+family member who supplied the number, with no marketing content, AI
+disclosure in the first sentence, and a hard stop after three attempts. This
+is the standard reading of a non-telemarketing informational call, but it *is*
+a change to the posture the attorney review was going to bless. Raise it
+explicitly (section 7).
+
+### The caller ID problem
+
+An unknown number ringing an 80-year-old is a call that doesn't get answered —
+and, worse, teaches them to distrust the number Etta will use every day. Two
+fixes ship with this flow, and one is still outstanding:
+
+- **The contact card.** `ettacalls.com/save` is a senior-facing page (bigger
+  type, one action, nothing being sold) with a `/etta.vcf` contact card
+  carrying Etta's name, number, photo and an honest note. Saved once, every
+  future call arrives as "Etta".
+- **The heads-up text.** The setup screen gives the family a one-tap link that
+  opens *their own* Messages app with the text pre-written, addressed to their
+  parent, containing the number and the save link. Deliberately from the
+  family's phone: the first thing the senior hears about Etta comes from
+  someone they trust, and it sidesteps A2P entirely — Etta's own campaign is
+  declared as messaging the account holder only, and texting seniors from it
+  would contradict that declaration. If we ever want Etta to text seniors
+  directly, the campaign must be re-declared first.
+- **Still to do: CNAM.** Register the display name on `+1 762 239 4275` with
+  Twilio (Phone Numbers → the number → Caller Name (CNAM)) so phones that
+  never saved the card still show "Etta" rather than a bare number. US CNAM
+  is carrier-dependent and takes a few days to propagate.
 
 ### Billing, and the promise it encodes
 
@@ -309,6 +396,14 @@ The next cron tick after 9:00 senior-time places the first call.
 
 ## 6. Verify the loop end to end
 
+- Sign up with two numbers you control, then tap **"Have Etta call them now"**:
+  a `calls` row with `kind='setup'` appears and the second phone rings within
+  seconds. Say yes → `consent_events` gets a `granted` row with the recording
+  URL, the senior goes `active`. Do it again on a fresh signup and say no →
+  senior goes `revoked` and the Stripe subscription cancels without a charge.
+- Don't answer the introduction call: two retries appear 45 minutes apart,
+  then the family text arrives and nothing further is scheduled.
+- Check the family page: the setup call must **not** appear as a check-in day.
 - `select * from calls order by created_at desc` — a row appears at the
   scheduled time, moves `scheduled → in_progress → completed`.
 - `select * from call_summaries order by created_at desc` — summary, mood,
@@ -325,7 +420,16 @@ The next cron tick after 9:00 senior-time places the first call.
 
 - **One TCPA attorney consultation** on the consent-capture mechanics above
   (buyer ≠ called party; recorded verbal consent from the subscriber). This
-  was flagged in the business plan as a launch blocker — it still is.
+  was flagged in the business plan as a launch blocker — it still is. Put
+  **the outbound introduction call** at the top of that conversation: it is
+  one non-marketing call, placed at the request of the family member who gave
+  us the number, disclosing the AI in its first sentence and asking for
+  consent as its only purpose, capped at three attempts and never repeated
+  after a no. That is the shape the rule contemplates, but it is us calling
+  someone who has not yet said yes, and it deserves a lawyer's sentence in
+  writing rather than ours. If the answer is no, the inbound route still
+  exists and the product still works — turn the setup screen's two buttons
+  off and nothing else has to change.
 - Recording notices: the consent script discloses recording (covers all-party
   consent states like California); keep it in every setup call verbatim.
 - Track the FCC's proposed AI-disclosure rule — Etta's first message already

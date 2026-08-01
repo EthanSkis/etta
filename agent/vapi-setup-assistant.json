@@ -1,0 +1,140 @@
+{
+  "_readme": [
+    "Vapi assistant definition for the SETUP CALL — the recorded conversation",
+    "where the senior decides for themselves. The live assistant",
+    "0089b42e-799e-42c5-878a-2478387ae1de was created in the dashboard on",
+    "2026-07-31; this file is now the source of truth for it, so PATCH the live",
+    "assistant when it changes (and remember Vapi PATCH replaces a nested",
+    "object wholesale — always send the complete `model` object).",
+    "Before POSTing/PATCHing: (1) replace the model system message content with",
+    "the full text of agent/etta-setup-prompt.md (everything after the first",
+    "---), (2) set server.secret to the same value as VAPI_WEBHOOK_SECRET.",
+    "It answers inbound calls to Etta's number AND is the assistant used for",
+    "the outbound introduction call, which passes firstMessage,",
+    "firstMessageMode and direction=outbound as per-call overrides (see",
+    "supabase/functions/setup-call/index.ts). The structured schema below must",
+    "stay in sync with what call-events/index.ts reads. Remove this _readme",
+    "key before POSTing."
+  ],
+  "name": "Etta (setup)",
+  "_firstMessage": [
+    "This one is for INBOUND: they dialed Etta, so she answers. The outbound",
+    "introduction call overrides it with a line that discloses first and checks",
+    "who picked up, because an outbound call reaches whoever is nearest the",
+    "phone."
+  ],
+  "firstMessage": "Hello, this is Etta — I'm an AI assistant, not a person. Am I speaking with the person the check-in calls would be for?",
+  "model": {
+    "provider": "anthropic",
+    "model": "claude-haiku-4-5-20251001",
+    "temperature": 0.5,
+    "messages": [
+      {
+        "role": "system",
+        "content": "PASTE THE FULL CONTENTS OF agent/etta-setup-prompt.md HERE"
+      }
+    ],
+    "tools": [
+      {
+        "_comment": "Lets Etta end the call herself once the decision is made — nobody should have to work out how to get rid of her, least of all on a call they didn't ask for.",
+        "type": "endCall"
+      }
+    ]
+  },
+  "voice": {
+    "provider": "vapi",
+    "voiceId": "Clara"
+  },
+  "transcriber": {
+    "provider": "deepgram",
+    "model": "nova-3",
+    "language": "en"
+  },
+  "_backgroundSound": "Same reasoning as the main assistant: call-centre ambience on a consent call reads as telemarketing, which is the exact thing this call has to not be.",
+  "backgroundSound": "off",
+  "maxDurationSeconds": 600,
+  "silenceTimeoutSeconds": 30,
+  "backgroundDenoisingEnabled": true,
+  "_voicemailMessage": "A consent request must never be left on an answering machine — there is nobody there to say no. Leave the fact of the call and the number, nothing else.",
+  "voicemailMessage": "Hello — this is Etta, an AI assistant. A family member asked me to call; there's nothing at all wrong, and I'll try again another time. You can also reach me on 762 239 4275.",
+  "server": {
+    "url": "https://kkqgxojxsfqgfpzdyzjv.supabase.co/functions/v1/call-events",
+    "secret": "SET_TO_SAME_VALUE_AS_VAPI_WEBHOOK_SECRET"
+  },
+  "serverMessages": [
+    "assistant-request",
+    "end-of-call-report",
+    "status-update"
+  ],
+  "artifactPlan": {
+    "_comment": "The recording IS the consent record — consent_events.recording_url points at it.",
+    "recordingEnabled": true
+  },
+  "analysisPlan": {
+    "summaryPlan": {
+      "enabled": true,
+      "messages": [
+        {
+          "role": "system",
+          "content": "Summarize, in 1–3 plain sentences, what was decided on this setup call: whether the person agreed to receive Etta's daily check-in calls, declined them, asked to be called back, or never actually came to the phone. Quote the words that settled it where you can. Do not editorialize and do not invent anything the transcript does not show."
+        },
+        {
+          "role": "user",
+          "content": "Here is the transcript of the call:\n\n{{transcript}}"
+        }
+      ]
+    },
+    "structuredDataPlan": {
+      "enabled": true,
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are deciding whether a person consented to receive recurring automated phone calls. This is a legal record, so err toward 'no consent' in every ambiguous case. Set consent_given true ONLY if the senior themself clearly agreed, in their own words, after Etta explained that she is an AI and what the calls are — not if a family member agreed for them, not for a vague 'sure, whatever', not if they sound confused about what they are agreeing to. Set consent_declined true only for a clear no or a clear 'not for me'. If they asked to be rung back later, set call_back_hours to how many hours away that is (rounded, 1–72) and leave both consent booleans false. Set wrong_person true if the call was answered by someone who is not the senior, or Etta could not establish who she was speaking to. reached_senior is false for voicemail, no real conversation, or the wrong person. consent_quote is the senior's own decisive words, verbatim. JSON only."
+        },
+        {
+          "role": "user",
+          "content": "Here is the transcript of the call:\n\n{{transcript}}"
+        }
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "reached_senior": {
+            "type": "boolean",
+            "description": "True only if Etta actually spoke with the senior themself."
+          },
+          "wrong_person": {
+            "type": "boolean",
+            "description": "Someone other than the senior answered, or Etta could not establish who it was."
+          },
+          "consent_given": {
+            "type": "boolean",
+            "description": "The senior, in their own voice, clearly agreed to the daily calls after the AI disclosure."
+          },
+          "consent_declined": {
+            "type": "boolean",
+            "description": "The senior clearly said no."
+          },
+          "consent_quote": {
+            "type": ["string", "null"],
+            "description": "The senior's own decisive words, verbatim — the evidence for whichever flag is set."
+          },
+          "call_back_hours": {
+            "type": ["number", "null"],
+            "description": "If they asked Etta to try again later, how many hours from now (1–72). Null otherwise."
+          },
+          "concerns": {
+            "type": ["string", "null"],
+            "description": "Anything the senior worried about or asked that the family should know, in one plain sentence."
+          }
+        },
+        "required": [
+          "reached_senior",
+          "wrong_person",
+          "consent_given",
+          "consent_declined"
+        ]
+      }
+    }
+  }
+}
