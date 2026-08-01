@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
     .from("calls")
     .select(
       "id, scheduled_for, attempt_number, senior:seniors!inner(" +
-        "id, status, first_name, preferred_name, phone, timezone, notes, " +
+        "id, status, first_name, preferred_name, phone, timezone, notes, share_recordings, " +
         "family:families!inner(primary_contact_name, subscription_status))",
     )
     .eq("status", "scheduled")
@@ -173,7 +173,7 @@ Deno.serve(async (req) => {
     const senior = call.senior as unknown as {
       id: string; status: string; first_name: string;
       preferred_name: string | null; phone: string; timezone: string;
-      notes: string | null;
+      notes: string | null; share_recordings: string;
       family: { primary_contact_name: string; subscription_status: string | null };
     };
 
@@ -234,6 +234,8 @@ Deno.serve(async (req) => {
             last_call_summary: lastSummary?.summary || "",
             ask_about: lastSummary?.tomorrow_topic || "",
             attempt_number: String(call.attempt_number),
+            // Etta only raises the recording question while it's unanswered.
+            ask_recording: senior.share_recordings === "unknown" ? "yes" : "no",
           },
         },
       }),

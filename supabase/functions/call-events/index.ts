@@ -346,6 +346,38 @@ async function handleCompleted(call: any, message: any) {
     .single();
   if (sumErr) console.error("summary upsert failed:", sumErr.message);
 
+  // What the senior said about letting family hear the audio. The standing
+  // answer drives future calls; this call gets a snapshot of what applied to
+  // it. A decline also retires audio already shared — if someone decides they
+  // don't want to be listened to, that covers the ones already recorded.
+  const share = String(structured.recording_share ?? "not_discussed");
+  const standing = (await supabase.from("seniors")
+    .select("share_recordings").eq("id", call.senior_id).maybeSingle()).data?.share_recordings
+    ?? "unknown";
+  let sharedNow = standing === "yes";
+  if (share === "granted" || share === "declined") {
+    const answer = share === "granted" ? "yes" : "no";
+    if (answer !== standing) {
+      await supabase.from("seniors")
+        .update({ share_recordings: answer }).eq("id", call.senior_id);
+      await supabase.from("consent_events").insert({
+        senior_id: call.senior_id,
+        event: answer === "yes" ? "granted" : "revoked",
+        method: "in_call_recording_share",
+        notes: answer === "yes"
+          ? "Senior agreed on a check-in call that family may listen to the call audio."
+          : "Senior asked that family not listen to the call audio.",
+      });
+    }
+    sharedNow = answer === "yes";
+    if (answer === "no") {
+      await supabase.from("calls")
+        .update({ recording_shared: false }).eq("senior_id", call.senior_id);
+    }
+  }
+  await supabase.from("calls")
+    .update({ recording_shared: sharedNow }).eq("id", call.id);
+
   if (structured.revocation_requested === true) {
     await handleRevocation(call, structured);
     return; // revocation text replaces the summary text today
@@ -417,7 +449,7 @@ async function handleAssistantRequest(message: any): Promise<Response> {
   const caller = message?.call?.customer?.number ?? "";
   const { data: senior } = await supabase.from("seniors")
     .select(
-      "id, first_name, preferred_name, status, notes, " +
+      "id, first_name, preferred_name, status, notes, share_recordings, " +
         "family:families!inner(primary_contact_name), " +
         "schedules:call_schedules(call_time, active)",
     )
@@ -455,6 +487,7 @@ async function handleAssistantRequest(message: any): Promise<Response> {
           last_call_summary: "",
           ask_about: "",
           attempt_number: "1",
+          ask_recording: senior.share_recordings === "unknown" ? "yes" : "no",
         },
       },
     });
