@@ -598,8 +598,13 @@ Deno.serve(async (req) => {
   } else if (latest) {
     if (!latest.completed) {
       headline = `Etta couldn't reach ${name}.`;
-      because = "The calls went unanswered, and your contact chain was notified. " +
-        "A quick call from you is the right next step.";
+      // Don't claim the contact chain "was notified" — whether the text
+      // actually went out is Twilio's business, not this page's, and telling
+      // someone they were alerted when no text arrived is worse than saying
+      // nothing. State what Etta did; the next step is the same either way.
+      because = "Etta tried and couldn't get through today. That's often " +
+        "nothing — errands, a nap, the phone in another room — but you know " +
+        `${name} best, and a quick call from you is the right next step.`;
       verdictColour = "#BC5127";
     } else if (latest.urgent) {
       headline = "Worth a look today.";
@@ -733,8 +738,8 @@ ${isLatest ? `<div class="eyebrow">Most recent</div>` : ""}
 <div><span class="lab">No answer</span>${
         day.pending
           ? `Etta called and got no answer. She'll try again shortly.`
-          : `Etta tried and couldn't reach ${esc(name)} that day. ` +
-            `The contact chain was notified.`
+          : `Etta tried ${esc(name)} several times that day and couldn't ` +
+            `get through.`
       }</div></div></div>`;
     }
     // 6. what Etta will follow up on next time
