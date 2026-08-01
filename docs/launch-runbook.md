@@ -14,7 +14,7 @@ Already provisioned — steps 1, 3 and 4 below are ✅ done:
 | Vapi phone number id | `bf43dc1e-9d25-400c-87ef-607a51641419` |
 | Cron | `etta-place-due-calls`, every 10 min (pg_cron job 1) |
 | Summary delivery | **SMS from Etta's own number** (+1 762 239 4275) — deliberately no email and no app, on either side of the product. Test text delivered. |
-| Stripe (LIVE) | Products + prices created: Standard `price_1TzO26A8l4yd6OUzIGnqRkhB` ($19), Daily `price_1TzO27A8l4yd6OUzhi1l2T3b` ($39). Webhook endpoint `we_1TzO7NA8l4yd6OUz2KTnJvVJ`. Customer portal configured. **Needs `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` secrets before checkout works.** |
+| Stripe (LIVE) | Products + prices created: Standard `price_1TzO26A8l4yd6OUzIGnqRkhB` ($19), Daily `price_1TzO27A8l4yd6OUzhi1l2T3b` ($39). Webhook endpoint `we_1TzO7NA8l4yd6OUz2KTnJvVJ`. Customer portal configured. **`STRIPE_SECRET_KEY` must be the FULL revealed key.** Copying it from the dashboard while still masked yields something like `sk_live_51ABC…wXyZ`; the `…` is U+2026, which `fetch` rejects as an invalid header before Stripe is ever contacted — checkout then 502s with no Stripe-side trace. `signup` now detects this and returns a clear 503 instead. |
 
 ### ⚠️ Two Stripe things to fix before taking real money
 
@@ -76,7 +76,8 @@ supabase secrets set --project-ref kkqgxojxsfqgfpzdyzjv \
   TWILIO_ACCOUNT_SID="AC..." \
   TWILIO_AUTH_TOKEN="..." \
   TWILIO_FROM_NUMBER="+17622394275" \
-  STRIPE_SECRET_KEY="sk_live_..." \
+  STRIPE_SECRET_KEY="sk_live_..." \   # click "Reveal" in Stripe first — a masked
+                                     # key contains "…" and silently breaks checkout
   STRIPE_WEBHOOK_SECRET="whsec_..."   # from the webhook endpoint, see below
 ```
 
