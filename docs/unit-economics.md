@@ -128,6 +128,34 @@ them" is good product design and directly at odds with the pricing. That's a
 real tension, not a bug — but it means the Daily plan's economics depend on
 seniors *not* taking Etta up on the offer.
 
+### Call-length budget at a 60% margin target
+
+Inverting the model — the longest a call may run and still return 60% gross
+margin, at an 80% answer rate. "cap" means there's headroom past the 10-minute
+`maxDurationSeconds` ceiling; "—" means 60% is unreachable at *any* call length
+because the SMS fan-out and Stripe fee have already eaten the budget.
+Reproduce with `node scripts/unit-economics.mjs --target=0.6`.
+
+| SMS recipients | 1 | 2 | 3 | 5 |
+|---|---|---|---|---|
+| **Standard $19** — emoji (today) | 4.0 min | 3.2 min | 2.3 min | 0.5 min |
+| **Daily $39** — emoji (today) | 3.5 min | 2.7 min | 1.8 min | — |
+| **Standard $19** — plain GSM-7 | 4.4 min | 4.0 min | 3.6 min | 2.7 min |
+| **Daily $39** — plain GSM-7 | 3.9 min | 3.5 min | 3.1 min | 2.2 min |
+
+Two things fall out of this. First, **60% is incompatible with the advertised
+3–6 minute call** on almost every configuration — only a single-recipient
+Standard subscriber has room for a 4-minute call, and nothing has room for six.
+Today's 2.65-minute average clears 60% at 1–2 recipients and misses it at 3+.
+
+Second, **the emoji decision costs more than the call-length decision** past two
+recipients. Moving to GSM-7 buys back 1.3 minutes at three recipients and turns
+the 5-recipient Daily case from impossible into 2.2 minutes. If 60% is the
+target, shortening the SMS body is a cheaper lever than shortening the call.
+
+Note this is *gross* margin — trial burn and CAC land on top, so 60% gross is
+not 60% net on a customer's first months.
+
 ## Problem 4 (fixed): past_due had no bound
 
 `PAYING_STATUSES` included `past_due` with no time limit, so a subscription that

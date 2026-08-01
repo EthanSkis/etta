@@ -155,3 +155,54 @@ for (const plan of ["standard", "daily"]) {
     (breakEven ? `${breakEven.toFixed(1)} min/call` : "no call length up to the 10-min cap"));
 }
 console.log();
+
+// ---------------------------------------------------------------------------
+// The inverse question: how long may a call run and still hit a margin target?
+//
+// Margin here is gross — revenue minus provider cost, SMS, and the Stripe fee.
+// It does NOT carry trial burn or CAC, both of which land on top (see
+// docs/unit-economics.md). Answer rate is held at the base assumption because
+// unanswered attempts cost money too and shorten the budget.
+// ---------------------------------------------------------------------------
+function maxMinutesFor(plan, target, opts) {
+  // Margin falls monotonically with call length, so bisect. The 10-minute
+  // ceiling is maxDurationSeconds in agent/vapi-assistant.json — past that the
+  // provider hangs up, so a longer answer would be meaningless.
+  const CAP = 10;
+  const marginPct = (m) => {
+    const r = monthlyCost(plan, { ...opts, minutes: m });
+    return r.margin / r.revenue;
+  };
+  if (marginPct(0.5) < target) return null;     // unreachable at any usable length
+  if (marginPct(CAP) >= target) return CAP;     // headroom past the hard cap
+  let lo = 0.5, hi = CAP;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (marginPct(mid) >= target) lo = mid; else hi = mid;
+  }
+  return lo;
+}
+
+const target = Number(argv.target ?? 0.6);
+console.log(`Longest call that still returns ${(target * 100).toFixed(0)}% gross margin`);
+console.log(`(${(base.answerRate * 100).toFixed(0)}% answer rate; "cap" = at or past the ` +
+  `10-min maxDurationSeconds ceiling)\n`);
+
+const smsCases = [[8, "emoji / UCS-2 (today)"], [4, "plain GSM-7"]];
+const recipientCases = [1, 2, 3, 5];
+
+for (const [segs, label] of smsCases) {
+  console.log(`  SMS ${label}`);
+  console.log(`    recipients ` + recipientCases.map((r) => String(r).padStart(7)).join(""));
+  for (const plan of ["standard", "daily"]) {
+    const cells = recipientCases.map((recipients) => {
+      const m = maxMinutesFor(plan, target, { ...base, recipients, smsSegments: segs });
+      const text = m === null ? "—" : m >= 10 ? "cap" : `${m.toFixed(1)}m`;
+      return text.padStart(7);
+    });
+    console.log(`    ${plan.padEnd(10)}` + cells.join(""));
+  }
+  console.log();
+}
+console.log(`  "—" = ${(target * 100).toFixed(0)}% is unreachable at any call length; the ` +
+  `fixed costs\n      (SMS fan-out + Stripe fee) already eat the budget.\n`);
