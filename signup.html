@@ -46,6 +46,14 @@ border-bottom:1px solid var(--line);cursor:pointer}
 .pick-body b{font-size:17px;font-weight:600}
 .pick-body small{font-size:15px;color:var(--terra-deep);margin-left:8px}
 .pick-body em{display:block;font-style:normal;font-size:13.5px;color:var(--ink-soft);margin-top:2px}
+.consent{display:flex;align-items:flex-start;gap:11px;margin-top:28px;
+padding-top:20px;border-top:1px solid var(--line);cursor:pointer}
+.consent input{margin-top:3px;accent-color:var(--terra);width:17px;height:17px;flex:none}
+.consent-body{display:block;font-size:13.5px;line-height:1.55;color:var(--ink-soft)}
+.consent-body a{color:var(--terra)}
+.consent.missing{animation:nudge .4s ease}
+.consent.missing .consent-body{color:var(--terra-deep)}
+@keyframes nudge{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 .hp-field{position:absolute;left:-9999px;top:-9999px}
 .signup-msg{color:var(--terra-deep);font-size:14px;margin-top:10px;min-height:1.3em}
 .signup-note{font-size:13px;color:var(--ink-soft);margin-top:12px;line-height:1.55}
@@ -132,6 +140,15 @@ font-weight:600;color:var(--terra-deep);margin:14px 0 4px;text-decoration:none}
             </label>
           </div>
 
+          <label class="consent">
+            <input type="checkbox" name="sms_consent" id="sms-consent">
+            <span class="consent-body">Yes, text me Etta's check-in notes and alerts at this number.
+              Message frequency varies (about one message per scheduled check-in).
+              Msg &amp; data rates may apply. Reply STOP to opt out, HELP for help.
+              See our <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a>
+              and <a href="terms.html" target="_blank" rel="noopener">terms</a>.</span>
+          </label>
+
           <div class="hp-field" aria-hidden="true"><input type="text" name="website" tabindex="-1" autocomplete="off"></div>
           <button class="btn" type="submit" style="width:100%;margin-top:26px">Continue to payment</button>
           <p class="signup-msg" role="status"></p>
@@ -171,6 +188,8 @@ font-weight:600;color:var(--terra-deep);margin:14px 0 4px;text-decoration:none}
         <a href="pledge.html">Our pledge</a>
         <a href="pricing.html">Pricing</a>
         <a href="faq.html">FAQ</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="terms.html">Terms</a>
         <a href="mailto:hello@ettacalls.com">hello@ettacalls.com</a>
       </div>
     </div>
@@ -284,9 +303,26 @@ font-weight:600;color:var(--terra-deep);margin:14px 0 4px;text-decoration:none}
     });
   });
 
+  /* The exact wording shown beside the checkbox, stored as the consent record. */
+  var CONSENT_TEXT = "Yes, text me Etta's check-in notes and alerts at this number. " +
+    "Message frequency varies (about one message per scheduled check-in). " +
+    "Msg & data rates may apply. Reply STOP to opt out, HELP for help.";
+
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     msg.textContent = "";
+
+    var consent = form.elements.sms_consent;
+    if (!consent.checked) {
+      var box = consent.closest(".consent");
+      box.classList.remove("missing");
+      void box.offsetWidth;
+      box.classList.add("missing");
+      msg.textContent = "Etta sends the check-in notes by text, so we need your ok to text you.";
+      consent.focus();
+      return;
+    }
+
     var btn = form.querySelector('button[type="submit"]');
     btn.disabled = true;
     btn.textContent = "Setting up…";
@@ -303,6 +339,8 @@ font-weight:600;color:var(--terra-deep);margin:14px 0 4px;text-decoration:none}
         call_time: form.elements.call_time.value,
         plan: (form.querySelector('input[name="plan"]:checked') || {}).value || "daily",
         notes: form.elements.notes.value,
+        sms_consent: true,
+        sms_consent_text: CONSENT_TEXT,
         website: form.elements.website.value
       })
     }).then(function (res) { return res.json().then(function (d) { return { ok: res.ok, d: d }; }); })
