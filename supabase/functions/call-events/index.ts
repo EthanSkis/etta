@@ -463,6 +463,8 @@ async function handleCompleted(call: any, message: any) {
   }
   if (link) body += `\n\nFull picture: ${link}`;
   body += `\n— Etta`;
+  // A2P 10DLC: recurring messages carry a standing opt-out reminder.
+  body += `\nReply STOP to end texts.`;
 
   const sent = await sendText(await familyPhones(call.senior_id), body);
   if (sent && summaryRow) {
@@ -603,9 +605,12 @@ async function handleInbound(message: any) {
     const link = `${FAM_LINK_BASE}/${senior.share_token}`;
     await sendText(
       await familyPhones(senior.id),
+      // First recurring message of the program: carries the full disclosure.
       `🟢 ${name} just said yes to Etta! Check-ins start tomorrow around ` +
         `${speech}. You'll get a note here after each call — and the full ` +
-        `picture any time: ${link}\n— Etta`,
+        `picture any time: ${link}\n— Etta\n` +
+        `Msg frequency varies. Msg & data rates may apply. ` +
+        `Reply STOP to opt out, HELP for help.`,
     );
   } else if (structured.consent_declined === true) {
     await cancelSubscription(senior.family_id, "senior_declined_consent");

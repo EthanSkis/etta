@@ -130,6 +130,10 @@ Deno.serve(async (req) => {
   const planKey = String(body.plan ?? "daily");
   const notes = String(body.notes ?? "").trim().slice(0, 1000) || null;
   const plan = PLANS[planKey];
+  // A2P 10DLC / TCPA: the summaries are delivered by text, so the account
+  // holder's consent to be texted is captured at signup and kept verbatim.
+  const smsConsent = body.sms_consent === true;
+  const smsConsentText = String(body.sms_consent_text ?? "").trim().slice(0, 1000) || null;
 
   if (!yourName || !parentName) return json({ error: "Please give both names." }, 400);
   if (!yourPhone) return json({ error: "Your mobile number doesn't look right." }, 400);
@@ -145,6 +149,11 @@ Deno.serve(async (req) => {
     return json({ error: "Please pick a call time." }, 400);
   }
   if (!plan) return json({ error: "Please pick a plan." }, 400);
+  if (!smsConsent) {
+    return json({
+      error: "Etta sends the check-in notes by text, so we need your ok to text you.",
+    }, 400);
+  }
 
   // One Etta per phone line — but an abandoned checkout shouldn't lock the
   // number forever, so an unsubscribed pending signup is replaced.
@@ -173,6 +182,9 @@ Deno.serve(async (req) => {
       primary_contact_phone: yourPhone,
       status: "self_serve",
       plan: planKey,
+      sms_consent_at: new Date().toISOString(),
+      sms_consent_text: smsConsentText,
+      sms_consent_source: "web_signup",
     }).select("id").single();
   if (famErr || !family) {
     console.error("family insert failed:", famErr?.message);

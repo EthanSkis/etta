@@ -47,12 +47,68 @@ Voice calls are unaffected: those work today on verified numbers.
 To fix, in the Twilio Console:
 
 1. Upgrade off the trial (A2P registration requires a paid account).
-2. Messaging → Regulatory Compliance → **A2P 10DLC**: register a **Brand**
-   (legal business name, address, EIN — or the Sole Proprietor path if you
-   have no EIN) and then a **Campaign**. Use case: customer care /
-   account notifications. Sample messages: paste a real summary text and a
-   real no-answer escalation text.
+2. Messaging → Regulatory Compliance → **A2P 10DLC**: register a **Brand**,
+   then a **Campaign** (use case: customer care / account notifications).
 3. Attach `+1 762 239 4275` to a **Messaging Service** linked to that campaign.
+   This does not disturb Vapi — a Messaging Service governs SMS only, and the
+   number's voice webhook stays pointed at Vapi.
+
+**Get an EIN and register a Standard brand — not Sole Proprietor.** A sole
+proprietor can get an EIN free from irs.gov in about fifteen minutes; no LLC
+needed. The two paths cost near enough the same ($4.50 brand + $15 campaign
+vetting + $2/mo either way), but Sole Proprietor caps you permanently at
+**one campaign, one phone number, 3,000 segments/day and 1 segment/sec**, and
+cannot be upgraded in place. At ~4 segments per family per day that ceiling is
+roughly 700 daily-plan families — fine for launch — but the 1 seg/sec
+throughput starts delaying summaries well before that, because the every-10-min
+cron ends calls in bursts. Migrating later means a second brand, a second $15
+vetting fee, re-pointing the number, and a delivery gap while live families
+depend on the escalation texts. Do it right the first time.
+
+**Campaign registration answers** (the fields as Twilio asks them):
+
+- *Description* — "Etta is a scheduled wellbeing check-in service. Customers
+  sign up on ettacalls.com for an AI companion that phones their aging parent
+  on a schedule the parent has personally agreed to. This campaign sends
+  transactional account notifications to the paying account holder only: a
+  short summary after each scheduled check-in call, an alert when the parent
+  could not be reached, and account status notices such as when the parent
+  opts in or out and when the subscription changes as a result. Messages are
+  sent only to the mobile number the account holder entered for themselves.
+  No marketing, promotional, or third-party content is ever sent."
+- *Samples* — paste the five real templates from `call-events/index.ts` with a
+  fictional first name: the post-call summary, the no-answer escalation, the
+  consent-confirmation, the revocation notice, and the decline notice.
+- *Message contents* — tick **"will include embedded links"** (every message
+  carries `FAM_LINK_BASE/<share_token>`). Leave phone numbers, direct lending
+  and age-gated unticked; no body contains a phone number today.
+- *Opt-in* — describe the signup checkbox verbatim, name
+  `https://www.ettacalls.com/signup`, and link a hosted screenshot of the form.
+  State that there is no text-to-join keyword and no other opt-in method.
+- *Privacy / Terms URLs* — `https://www.ettacalls.com/privacy` and
+  `https://www.ettacalls.com/terms`. Reviewers fetch both; 404s are an
+  automatic rejection and a resubmit costs another $15.
+- *Opt-in keywords / Opt-in message* — leave blank. There is no text-to-join.
+  STOP and HELP still work via the Messaging Service's default opt-out handling.
+
+The opt-in half of this is now built: `signup.html` has an unticked consent
+checkbox whose wording matches what the campaign declares, the signup edge
+function refuses a signup without it and records the verbatim text in
+`families.sms_consent_*`, and the recurring templates carry the opt-out
+reminder. **The one thing still missing is the hosted opt-in screenshot** —
+take one of the live signup form and put it somewhere publicly fetchable
+before submitting the campaign.
+
+Two things to get right when shipping that:
+
+- **Run the migration before deploying the signup function.** The function now
+  writes `sms_consent_at` / `sms_consent_text` / `sms_consent_source`, so
+  deploying it against a database without those columns fails every signup.
+- **Pilot families predating the checkbox have `sms_consent_at` null.** The
+  code does not yet gate `sendText` on that column, so they keep receiving
+  texts on implied consent. Before the campaign goes live, either collect a
+  real opt-in from them or accept that the audit trail starts at the first
+  checkbox signup — don't let a null row be mistaken for a recorded yes.
 
 Until this clears, treat the family-notification half of the product as
 non-functional, and note that `call_summaries.delivered_at` currently means
