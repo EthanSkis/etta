@@ -19,6 +19,8 @@
 const RATE = {
   vapiPlatformPerMin: 0.05,   // Vapi orchestration
   twilioVoicePerMin: 0.014,   // Twilio outbound, US
+  twilioInboundPerMin: 0.0085, // Twilio inbound to a US local number — the
+                               // consent call is inbound (the senior dials Etta)
   sttPerMin: 0.008,           // Deepgram nova-3, streaming
   ttsPerMin: 0.020,           // Vapi "Clara"; premium voices run to 0.036
   smsPerSegment: 0.0109,      // 0.0079 Twilio + 0.003 A2P 10DLC carrier surcharge
@@ -123,8 +125,12 @@ function trialDrag(plan, opts, conversion, trialDays = 14) {
 }
 
 // ---------------------------------------------------------------------------
+// `--flag` (no value) reads as true; `--key=value` as the value.
 const argv = Object.fromEntries(
-  process.argv.slice(2).map((a) => a.replace(/^--/, "").split("=")),
+  process.argv.slice(2).map((a) => {
+    const [k, ...rest] = a.replace(/^--/, "").split("=");
+    return [k, rest.length ? rest.join("=") : true];
+  }),
 );
 const base = {
   minutes: Number(argv.minutes ?? 4.5),      // system prompt targets 3-6 min
@@ -136,6 +142,87 @@ const base = {
 
 const usd = (n) => `$${n.toFixed(2)}`;
 const pct = (n, d) => `${((n / d) * 100).toFixed(0)}%`;
+
+// ---------------------------------------------------------------------------
+// --trial : what a trial that never converts actually costs.
+//
+// "Cancelled trial" is not one thing. A family that never gets their parent to
+// call Etta costs almost nothing; one that consents and then churns on day 14
+// costs a full half-month of service. The gap between those is ~20x, which
+// matters more than the average, because the two are fixed by different things.
+// ---------------------------------------------------------------------------
+if (argv.trial !== undefined) {
+  const plan = argv.plan ?? "daily";
+  const mins = Number(argv.minutes ?? 4.5);
+  const recipients = Number(argv.recipients ?? 2);
+  const segs = Number(argv.smsSegments ?? 8);
+  const cached = argv.cached !== "false";
+  const setupMins = Number(argv.setupMinutes ?? 4);
+  const cash = (n) => `$${n.toFixed(2)}`;
+
+  // The inbound consent call: senior dials Etta, the setup assistant runs, and
+  // the recording is the legal consent artifact. Happens once, before any
+  // outbound call, and is unrecoverable if they decline.
+  const setupCall =
+    setupMins * (RATE.vapiPlatformPerMin + RATE.twilioInboundPerMin + RATE.sttPerMin + RATE.ttsPerMin)
+    + llmDetail(setupMins, { cached }).total;
+
+  // Measured with a GSM-7/UCS-2 segment counter against the real message
+  // bodies in call-events and stripe-webhook. All are UCS-2: the emoji in the
+  // welcome text, and the em-dash in the "— Etta" signature everywhere else.
+  const SMS = {
+    welcome: 5 * RATE.smsPerSegment * recipients,
+    declined: 4 * RATE.smsPerSegment * recipients,
+    neverConsented: 3 * RATE.smsPerSegment,   // trial_will_end, primary contact only
+    summary: segs * RATE.smsPerSegment * recipients,
+  };
+
+  const perCheckIn = mins * perConnectedMinute + llmCostPerCall(mins, { cached }) + SMS.summary;
+  const callsPerDay = PLANS[plan].daysPerWeek / 7;
+
+  const scenarios = [
+    ["Abandoned before consent", 0, 0, SMS.neverConsented,
+      "senior never called Etta; nothing was ever placed"],
+    ["Senior declined consent", 1, 0, SMS.declined,
+      "consent call happened, no check-ins ever"],
+    ["Consented, churned day 7", 1, 7 * callsPerDay, SMS.welcome,
+      "half the trial used"],
+    ["Ran full 14 days, no convert", 1, 14 * callsPerDay, SMS.welcome,
+      "the expensive failure"],
+  ];
+
+  console.log(`\nWhat a trial that never converts costs — ${plan} plan, ` +
+    `${mins}-min calls, ${recipients} SMS recipient(s)\n`);
+  console.log(`  ${"scenario".padEnd(30)}${"setup".padStart(8)}${"check-ins".padStart(11)}` +
+    `${"SMS".padStart(8)}${"TOTAL".padStart(9)}`);
+  const totals = [];
+  for (const [label, setups, checkIns, sms, note] of scenarios) {
+    const s = setups * setupCall;
+    const c = checkIns * perCheckIn;
+    const total = s + c + sms;
+    totals.push(total);
+    console.log(`  ${label.padEnd(30)}${cash(s).padStart(8)}${cash(c).padStart(11)}` +
+      `${cash(sms).padStart(8)}${cash(total).padStart(9)}   ${note}`);
+  }
+
+  console.log(`\n  Stripe takes nothing — a trial that never converts is never charged,` +
+    `\n  so there is no processing fee to recover.`);
+  console.log(`\n  One consent call alone: ${cash(setupCall)} (${setupMins} min inbound). ` +
+    `One trial check-in: ${cash(perCheckIn)}.`);
+
+  // What it costs to ACQUIRE one paying customer, given a mix of failures.
+  const conversion = Number(argv.conversion ?? 0.4);
+  const worst = totals[totals.length - 1];
+  console.log(`\n  At ${(conversion * 100).toFixed(0)}% conversion, every paying customer ` +
+    `funds ${((1 - conversion) / conversion).toFixed(1)} failed trials.`);
+  console.log(`  If they all fail the expensive way: ${cash(worst * (1 - conversion) / conversion)} ` +
+    `carried per paying customer.`);
+  console.log(`  If they fail early (declined consent): ` +
+    `${cash(totals[1] * (1 - conversion) / conversion)}.`);
+  console.log(`\n  That spread is the point — where a trial dies matters more than ` +
+    `how many die.\n  Failing fast is ~20x cheaper than failing at day 14.\n`);
+  process.exit(0);
+}
 
 // ---------------------------------------------------------------------------
 // --call=10 : everything one call of a given length costs, itemised.

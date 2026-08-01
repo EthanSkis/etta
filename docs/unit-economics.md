@@ -80,6 +80,40 @@ Halving the trial to 7 days halves the burn: Daily's carried cost drops from
 $22.91 to $11.45 and payback from 1.3 months to 0.6. Gating trial calls to
 Standard frequency regardless of plan does something similar.
 
+### What one cancelled trial costs
+
+"Cancelled trial" is four different failures with a ~20× spread between them.
+`node scripts/unit-economics.mjs --trial --plan=daily`:
+
+| How the trial died | Setup call | Check-ins | SMS | **Total** |
+|---|---|---|---|---|
+| Abandoned before consent | $0.00 | $0.00 | $0.03 | **$0.03** |
+| Senior declined consent | $0.40 | $0.00 | $0.09 | **$0.48** |
+| Consented, churned at day 7 | $0.40 | $4.52 | $0.11 | **$5.03** |
+| Ran the full 14 days, no convert | $0.40 | $9.04 | $0.11 | **$9.55** |
+
+(Daily plan, 4.5-min calls, 2 recipients. Standard is $0.03 / $0.48 / $2.44 /
+$4.38 — the setup call and SMS are identical; only the check-in count differs.)
+
+Stripe takes nothing: a trial that never converts is never charged, so there is
+no processing fee to recover. Twilio's number rental and A2P campaign fees are
+fixed monthly overhead and don't belong to any particular trial.
+
+The inbound consent call is $0.40 on its own (4 minutes at the inbound rate,
+$0.0085/min rather than the $0.014 outbound). One trial check-in is $0.65.
+
+**The shape of that table is the actionable part.** A family that never gets
+their parent to call Etta costs three cents. One that consents and then churns
+on day 14 costs $9.55. So the thing to optimise is not how many trials fail but
+*when* — a signup that is never going to work is 20× cheaper to lose in week one
+than in week two. Concretely, that argues for pushing the consent call to happen
+immediately at signup rather than whenever the family gets round to it: it moves
+failures from the expensive column to the cheap one, and it is the same change
+that improves conversion.
+
+At 40% conversion each paying customer funds 1.5 failed trials — $14.32 carried
+if they all fail the expensive way, $0.73 if they all fail at consent.
+
 **What does _not_ help: moving the trial clock to the consent call.** Seniors
 are created `pending_consent`, and `place-due-calls` only calls seniors with
 `status = 'active'`, so no outbound calls happen between checkout and consent —
@@ -266,6 +300,14 @@ Notes on each:
    characters per segment the win comes from length, not from removing glyphs.
    Move the chips and flag detail behind the `/f/<token>` link, which already
    exists and renders better than SMS does.
+
+   Note that going GSM-7 takes more than dropping emoji: **every** Etta message
+   is UCS-2 today, including the ones with no emoji at all, because the em-dash
+   in the `— Etta` signature and the curly apostrophes in "didn't" / "that's"
+   are outside the GSM-7 alphabet. If you want the cheaper encoding you have to
+   sign off with `- Etta` and use straight quotes throughout. That is a real
+   typographic downgrade for roughly half the SMS bill — worth pricing, not
+   worth doing by accident.
 3. **Call cap.** The median call is 2.65 minutes, so a 7-minute cap touches
    almost nobody — it truncates only the tail that loses money. Watch the p90,
    not the mean.
