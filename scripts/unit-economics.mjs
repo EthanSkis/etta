@@ -39,17 +39,24 @@ const LLM = {
   analysisPerCall: 0.02,      // summaryPlan + structuredDataPlan over the transcript
 };
 
-function llmCostPerCall(minutes, { cached }) {
+function llmDetail(minutes, { cached }) {
   const turns = Math.round(LLM.turnsPerMinute * minutes);
-  // Σ(systemPrompt + growing transcript) over every turn.
+  // Σ(systemPrompt + growing transcript) over every turn. The transcript term
+  // is triangular — turn N re-sends everything from turns 1..N-1 — so total
+  // input tokens grow with the SQUARE of call length, not linearly.
   const prefix = LLM.systemPromptTokens * turns * (cached ? LLM.cacheHitFactor : 1);
   const transcript = (LLM.tokensPerTurn / 2) * turns * (turns + 1) / 2;
   const inTok = prefix + transcript;
   const outTok = turns * LLM.outputTokensPerTurn;
-  return (inTok / 1e6) * LLM.inPerMTok
-    + (outTok / 1e6) * LLM.outPerMTok
-    + LLM.analysisPerCall;
+  const conversation = (inTok / 1e6) * LLM.inPerMTok + (outTok / 1e6) * LLM.outPerMTok;
+  return {
+    turns, inTok, outTok, conversation,
+    analysis: LLM.analysisPerCall,
+    total: conversation + LLM.analysisPerCall,
+  };
 }
+
+const llmCostPerCall = (minutes, opts) => llmDetail(minutes, opts).total;
 
 const perConnectedMinute =
   RATE.vapiPlatformPerMin + RATE.twilioVoicePerMin + RATE.sttPerMin + RATE.ttsPerMin;
@@ -126,6 +133,65 @@ const base = {
 
 const usd = (n) => `$${n.toFixed(2)}`;
 const pct = (n, d) => `${((n / d) * 100).toFixed(0)}%`;
+
+// ---------------------------------------------------------------------------
+// --call=10 : everything one call of a given length costs, itemised.
+// ---------------------------------------------------------------------------
+if (argv.call !== undefined) {
+  const mins = Number(argv.call);
+  const recipients = Number(argv.recipients ?? 2);
+  const segs = Number(argv.smsSegments ?? 8);
+  const cached = argv.cached !== "false";
+  const cash = (n) => `$${n.toFixed(4)}`;
+
+  const rows = [
+    ["Vapi platform", RATE.vapiPlatformPerMin * mins, `${mins} min x $${RATE.vapiPlatformPerMin}`],
+    ["Twilio voice (US outbound)", RATE.twilioVoicePerMin * mins, `${mins} min x $${RATE.twilioVoicePerMin}`],
+    ["Deepgram nova-3 (STT)", RATE.sttPerMin * mins, `${mins} min x $${RATE.sttPerMin}`],
+    ["TTS (Vapi 'Clara')", RATE.ttsPerMin * mins, `${mins} min x $${RATE.ttsPerMin}`],
+  ];
+
+  const llm = llmDetail(mins, { cached });
+  rows.push([
+    `claude-haiku-4-5 (conversation)`, llm.conversation,
+    `${llm.turns} turns, ${Math.round(llm.inTok / 1000)}k in / ${llm.outTok} out` +
+      `${cached ? ", cached" : ", UNCACHED"}`,
+  ]);
+  rows.push(["  post-call analysis", llm.analysis, "summary + structured data"]);
+  rows.push([
+    "SMS summary", segs * recipients * RATE.smsPerSegment,
+    `${segs} seg x ${recipients} recipient(s) x $${RATE.smsPerSegment}`,
+  ]);
+
+  const total = rows.reduce((s, [, v]) => s + v, 0);
+
+  console.log(`\nOne ${mins}-minute call, answered, itemised` +
+    `${mins >= 10 ? "  (10 min = the maxDurationSeconds cap)" : ""}\n`);
+  for (const [label, value, note] of rows) {
+    console.log(`  ${label.padEnd(32)}${cash(value).padStart(9)}   ${note}`);
+  }
+  console.log(`  ${"".padEnd(32)}${"—".padStart(9)}`);
+  console.log(`  ${"TOTAL".padEnd(32)}${cash(total).padStart(9)}\n`);
+
+  // What that one call consumes of the month it belongs to. This assumes every
+  // scheduled call connects, so it is the optimistic bound — the monthly model
+  // above applies the answer rate, trading some talk minutes for retry
+  // minutes, and lands slightly worse.
+  for (const plan of ["standard", "daily"]) {
+    const price = PLANS[plan].price;
+    const calls = PLANS[plan].daysPerWeek * (365 / 12 / 7);
+    console.log(`  ${plan.padEnd(9)} $${price}/mo: one such call is ${pct(total, price)} ` +
+      `of the month's revenue. ${calls.toFixed(0)} of them = ${usd(total * calls)} + ` +
+      `${usd(price * RATE.stripePct + RATE.stripeFixed)} Stripe vs ${usd(price)} ` +
+      `-> ${usd(price - total * calls - price * RATE.stripePct - RATE.stripeFixed)} margin`);
+  }
+  console.log(`\n  (assumes every scheduled call connects; with the ` +
+    `${(Number(argv.answerRate ?? 0.8) * 100).toFixed(0)}% answer rate\n` +
+    `   the monthly model uses, retries make it slightly worse)`);
+  console.log(`\n  Uncached LLM would add ` +
+    `${cash(llmDetail(mins, { cached: false }).conversation - llm.conversation)} to this call.\n`);
+  process.exit(0);
+}
 
 console.log(`\nAssumptions: ${base.minutes} min/call, ${base.recipients} SMS recipient(s), ` +
   `${(base.answerRate * 100).toFixed(0)}% answer rate, ${base.smsSegments} SMS segments, ` +

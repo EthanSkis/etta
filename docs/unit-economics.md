@@ -128,6 +128,38 @@ them" is good product design and directly at odds with the pricing. That's a
 real tension, not a bug — but it means the Daily plan's economics depend on
 seniors *not* taking Etta up on the offer.
 
+### What one 10-minute call costs
+
+The worst legal call — a senior who talks until `maxDurationSeconds` cuts them
+off. `node scripts/unit-economics.mjs --call=10`:
+
+| Component | Cost | Basis |
+|---|---|---|
+| Vapi platform | $0.5000 | 10 min × $0.05 |
+| Twilio voice | $0.1400 | 10 min × $0.014 |
+| Deepgram nova-3 | $0.0800 | 10 min × $0.008 |
+| TTS (Clara) | $0.2000 | 10 min × $0.020 |
+| Haiku 4.5 conversation | $0.1428 | 60 turns, 128k in / 3k out, cached |
+| Post-call analysis | $0.0200 | summary + structured data |
+| SMS summary | $0.1744 | 8 segments × 2 recipients |
+| **Total** | **$1.2572** | |
+
+At 1 recipient it's $1.17; at 5, $1.52. Uncached prompts add $0.16.
+
+**Vapi's platform fee alone is 40% of it** — more than every AI component
+combined. That's worth knowing before optimising models or voices: the
+orchestration layer, not the intelligence, is the biggest line item.
+
+**The LLM term is the one that doesn't scale linearly.** Because the whole
+transcript is re-sent every turn, going from 4 to 10 minutes (2.5×) takes Haiku
+from $0.03 to $0.14 — nearly 5×. Everything else is flat per minute. Long calls
+are punished specifically by conversation replay, which also means prompt
+caching is worth more the longer calls get; confirm Vapi is actually caching the
+Anthropic prefix.
+
+A month of these: Standard nets $1.76 (9%), Daily **loses $0.67**. So the
+10-minute cap is set above the point where the Daily plan stops working.
+
 ### Call-length budget at a 60% margin target
 
 Inverting the model — the longest a call may run and still return 60% gross
