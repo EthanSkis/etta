@@ -70,6 +70,9 @@ const ICONS = `<svg width="0" height="0" style="position:absolute" aria-hidden="
 <symbol id="i-pill" viewBox="0 0 24 24"><rect x="2.8" y="8.6" width="18.4" height="7.6" rx="3.8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 8.8v6.6" stroke="currentColor" stroke-width="1.6"/></symbol>
 <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4.5 21 19H3l9-14.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 10v4M12 16.6v.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
 <symbol id="i-watch" viewBox="0 0 24 24"><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5 20 12 7 19.5V4.5Z" fill="currentColor"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 4.5h3.6v15H7zM13.4 4.5H17v15h-3.6z" fill="currentColor"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
 <symbol id="i-phone-off" viewBox="0 0 24 24"><path d="M4.5 5.2c-.6 6.6 7.7 14.9 14.3 14.3l1.4-3-4-1.8-1.9 1.9a15 15 0 0 1-6.9-6.9l1.9-1.9L7.5 3.8 4.5 5.2Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 3l18 18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
 </svg>`;
 
@@ -168,6 +171,24 @@ h1{font-size:31px;letter-spacing:-.015em;margin-bottom:5px}
 .note-group .eyebrow{margin-bottom:8px}
 .note-group .note:first-of-type{margin-top:0}
 
+/* ---------- audio ---------- */
+.audio{display:flex;align-items:center;gap:12px;margin-top:16px;padding:11px 13px;
+  border:1px solid var(--line);border-radius:3px;background:var(--paper)}
+.audio.quiet{color:var(--ink-soft);font-size:13.5px;line-height:1.45}
+.audio.quiet svg{width:18px;height:18px;flex:none;opacity:.7}
+.play{width:38px;height:38px;flex:none;border-radius:50%;border:none;cursor:pointer;
+  background:var(--ink);color:var(--card);display:grid;place-items:center;padding:0}
+.play svg{width:15px;height:15px}
+.play .ic-pause{display:none}
+.audio.playing .play .ic-play{display:none}
+.audio.playing .play .ic-pause{display:block}
+.track{flex:1;min-width:0}
+.track-bar{height:4px;border-radius:2px;background:rgba(46,32,20,.16);overflow:hidden;cursor:pointer}
+.track-fill{height:100%;width:0;background:var(--terra);border-radius:2px}
+.track-meta{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-soft);
+  margin-top:5px;font-variant-numeric:tabular-nums}
+.track-meta b{font-weight:600;letter-spacing:.1em;text-transform:uppercase;font-size:10px}
+
 /* ---------- 14-day chart ---------- */
 .chart svg{display:block;width:100%;height:auto;overflow:visible}
 .legend{display:flex;gap:15px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-soft);margin-top:11px}
@@ -197,7 +218,58 @@ details .panel{margin:0 0 14px;box-shadow:none;animation:none}
 .foot b{color:var(--ink)}
 .center{text-align:center}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-</style></head><body>${ICONS}${body}</body></html>`,
+</style></head><body>${ICONS}${body}<script>
+(function () {
+  "use strict";
+  var mmss = function (n) {
+    if (!isFinite(n)) return "--:--";
+    var m = Math.floor(n / 60), s = Math.floor(n % 60);
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  };
+  document.querySelectorAll("[data-audio]").forEach(function (box) {
+    var audio = box.querySelector("audio");
+    var btn = box.querySelector(".play");
+    var bar = box.querySelector(".track-bar");
+    var fill = box.querySelector(".track-fill");
+    var time = box.querySelector(".t");
+
+    btn.addEventListener("click", function () {
+      if (audio.paused) {
+        // One at a time: two of Mum's calls playing over each other is nobody's idea of clarity.
+        document.querySelectorAll("[data-audio] audio").forEach(function (other) {
+          if (other !== audio) { other.pause(); }
+        });
+        audio.play();
+      } else {
+        audio.pause();
+      }
+    });
+    audio.addEventListener("play", function () { box.classList.add("playing"); });
+    audio.addEventListener("pause", function () { box.classList.remove("playing"); });
+    audio.addEventListener("ended", function () {
+      box.classList.remove("playing");
+      fill.style.width = "0%";
+    });
+    audio.addEventListener("loadedmetadata", function () {
+      time.textContent = mmss(audio.duration);
+    });
+    audio.addEventListener("timeupdate", function () {
+      if (!audio.duration) return;
+      fill.style.width = (audio.currentTime / audio.duration * 100) + "%";
+      time.textContent = mmss(audio.duration - audio.currentTime);
+    });
+    audio.addEventListener("error", function () {
+      box.classList.add("quiet");
+      box.innerHTML = "<div>That recording isn\'t available right now.</div>";
+    });
+    bar.addEventListener("click", function (e) {
+      if (!audio.duration) return;
+      var r = bar.getBoundingClientRect();
+      audio.currentTime = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * audio.duration;
+    });
+  });
+})();
+</script></body></html>`,
     {
       status,
       headers: {
@@ -311,7 +383,7 @@ Deno.serve(async (req) => {
   const since = new Date(Date.now() - DAYS * 864e5).toISOString().slice(0, 10);
   const { data: calls } = await supabase.from("calls")
     .select(
-      "id, status, scheduled_local_date, attempt_number, duration_seconds, " +
+      "id, status, scheduled_local_date, attempt_number, duration_seconds, recording_shared, " +
         "summary:call_summaries(summary, mood_score, ate_today, slept_well, meds_taken, flags)",
     )
     .eq("senior_id", senior.id)
@@ -323,6 +395,8 @@ Deno.serve(async (req) => {
   // Collapse attempts into one record per local day: a completed call wins;
   // a day of only no-answers is "missed"; no rows = no call scheduled.
   interface Day {
+    id: string | null;
+    recordingShared: boolean;
     date: string;
     completed: boolean;
     missed: boolean;
@@ -339,6 +413,7 @@ Deno.serve(async (req) => {
   for (const c of calls ?? []) {
     const date = c.scheduled_local_date as string;
     const cur = byDate.get(date) ?? {
+      id: null, recordingShared: false,
       date, completed: false, missed: false, minutes: 0, mood: null, urgent: false,
       slept: null, ate: null, meds: null, flags: [], summary: null,
     };
@@ -349,6 +424,8 @@ Deno.serve(async (req) => {
         | null;
       cur.completed = true;
       cur.missed = false;
+      cur.id = c.id as string;
+      cur.recordingShared = c.recording_shared === true;
       cur.minutes = Math.max(1, Math.round((c.duration_seconds ?? 60) / 60));
       if (s) {
         cur.summary = s.summary;
@@ -410,6 +487,24 @@ Deno.serve(async (req) => {
     return t.length ? `<div class="tiles">${t.join("")}</div>` : "";
   }
 
+  // Audio appears in both states on purpose: a family that never sees the
+  // player wonders whether it exists, while one that sees it greyed out with
+  // a plain sentence understands the arrangement immediately.
+  function player(day: Day): string {
+    if (!day.recordingShared || !day.id) {
+      return `<div class="audio quiet"><svg><use href="#i-lock"/></svg>
+<div>${esc(name)} chose not to share the call audio — you'll always get the note.</div></div>`;
+    }
+    return `<div class="audio" data-audio>
+<button class="play" type="button" aria-label="Play the recording">
+<svg class="ic-play"><use href="#i-play"/></svg><svg class="ic-pause"><use href="#i-pause"/></svg></button>
+<div class="track">
+  <div class="track-bar"><div class="track-fill"></div></div>
+  <div class="track-meta"><b>Listen to the call</b><span class="t">--:--</span></div>
+</div>
+<audio preload="none" src="${SITE}/a/${token}/${day.id}"></audio></div>`;
+  }
+
   function notes(day: Day): string {
     const group = (list: Flag[], urgent: boolean) => {
       if (!list.length) return "";
@@ -445,6 +540,7 @@ ${
     }
 ${tiles(day)}
 <p class="prose">${prose(day.summary ?? "")}</p>
+${player(day)}
 ${notes(day)}</div>`;
   }
 
