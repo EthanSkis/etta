@@ -197,13 +197,25 @@ function localDate(timeZone: string): string {
   }).format(new Date());
 }
 
-function classifyStatus(endedReason: string, durationSeconds: number): string {
+// A call only counts as a check-in if a conversation demonstrably happened.
+// Providers report failures in inventive ways — a call that never connected
+// came back as "call.in-progress.twilio-completed-call" with no duration and
+// no transcript — and the dangerous direction of error is to treat one of
+// those as a successful check-in, because then the family is told their
+// parent is fine when nobody spoke to them, and no retry is attempted.
+// So require evidence, rather than enumerating every way it can go wrong.
+function classifyStatus(
+  endedReason: string,
+  durationSeconds: number,
+  hasTranscript: boolean,
+): string {
   const r = endedReason.toLowerCase();
   if (
     r.includes("did-not-answer") || r.includes("no-answer") ||
     r.includes("busy") || r.includes("voicemail")
   ) return "no_answer";
   if (r.includes("error") || r.includes("failed")) return "failed";
+  if (!hasTranscript) return "no_answer";
   // Answered but hung up almost immediately — treat as unreached.
   if (durationSeconds > 0 && durationSeconds < 10) return "no_answer";
   return "completed";
@@ -653,7 +665,12 @@ Deno.serve(async (req) => {
         : 0),
   );
   const endedReason: string = message.endedReason ?? "";
-  const status = classifyStatus(endedReason, durationSeconds);
+  const transcript = message.artifact?.transcript ?? message.transcript ?? null;
+  const status = classifyStatus(
+    endedReason,
+    durationSeconds,
+    typeof transcript === "string" && transcript.trim().length > 0,
+  );
 
   await supabase.from("calls").update({
     status,
@@ -661,11 +678,14 @@ Deno.serve(async (req) => {
     ended_at: message.endedAt ?? new Date().toISOString(),
     duration_seconds: durationSeconds || null,
     ended_reason: endedReason || null,
-    transcript: message.artifact?.transcript ?? message.transcript ?? null,
+    transcript,
     recording_url: message.artifact?.recordingUrl ?? message.recordingUrl ?? null,
   }).eq("id", call.id);
 
-  if (status === "no_answer") await handleNoAnswer(call);
+  // A failed call is a call that didn't happen, and the remedy is the same as
+  // for no answer: try again shortly, and tell the family if we run out of
+  // tries. Leaving it inert meant a provider error silently skipped a day.
+  if (status === "no_answer" || status === "failed") await handleNoAnswer(call);
   if (status === "completed") await handleCompleted(call, message);
 
   return json({ ok: true, status });
