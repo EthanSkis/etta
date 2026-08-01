@@ -22,6 +22,12 @@
         "role": "system",
         "content": "PASTE THE FULL CONTENTS OF agent/etta-system-prompt.md HERE"
       }
+    ],
+    "tools": [
+      {
+        "_comment": "Lets Etta hang up herself. Without it she can only wait for the other person or time out — a senior should never have to work out how to get rid of her.",
+        "type": "endCall"
+      }
     ]
   },
   "voice": {
