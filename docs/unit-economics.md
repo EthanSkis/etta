@@ -200,6 +200,44 @@ Anthropic prefix.
 A month of these: Standard nets $1.76 (9%), Daily **loses $0.67**. So the
 10-minute cap is set above the point where the Daily plan stops working.
 
+### The worst case: everyone talks for 10 minutes, on Daily
+
+If every Daily subscriber used the full `maxDurationSeconds` allowance every
+day, with the summary SMS as it is written today:
+
+| SMS recipients | Monthly COGS | Margin at $39 | Break-even price | Price for 60% margin |
+|---|---|---|---|---|
+| 1 | $37.15 | **+$1.85 (5%)** | $37.09 | $97.09 |
+| 2 | $39.78 | **−$0.78 (−2%)** | $39.80 | $104.18 |
+| 3 | $42.41 | **−$3.41 (−9%)** | $42.51 | $111.26 |
+| 5 | $47.67 | **−$8.67 (−22%)** | $47.93 | $125.44 |
+
+**No — not profitable at two or more recipients**, and the single-recipient case
+survives on $1.85/month, which is indistinguishable from zero once anything else
+goes wrong. Voice alone is $28.18 of the $39. Uncached prompts push the
+2-recipient case to −$5.67.
+
+Then the trial lands on top. A failed 14-day trial at 10-minute calls costs
+$18.11 rather than $9.55, so at 40% conversion each paying customer carries
+$27.17. Year one per Daily subscriber at two recipients:
+
+    12 × (−$0.78) − $27.17  =  −$36.53
+
+Every subscriber acquired in that world destroys about $36 in their first year,
+and the single-recipient case needs ~15 months of margin just to repay its own
+trial.
+
+**This is not a pricing problem.** Reaching 60% margin at 10-minute calls needs
+$104–$125/month — two to three times the current price, and outside the market
+band entirely. The call length has to be capped instead; there is no price that
+rescues a 10-minute daily call at consumer rates.
+
+The reassuring part is that this is a tail, not a mean. Real completed calls
+average 2.65 minutes, so today's exposure is a handful of long calls rather than
+the whole book. But the cap that bounds it is currently set at 10 minutes —
+above the point where the plan stops working — which makes this an unpriced open
+position rather than a deliberate one.
+
 ### Call-length budget at a 60% margin target
 
 Inverting the model — the longest a call may run and still return 60% gross
