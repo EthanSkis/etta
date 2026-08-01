@@ -39,6 +39,8 @@
     "model": "nova-3",
     "language": "en"
   },
+  "_backgroundSound": "Vapi plays office/call-centre ambience by default when this is unset. On a warm personal check-in it reads as a telemarketing floor — the exact association Etta exists to avoid.",
+  "backgroundSound": "off",
   "maxDurationSeconds": 600,
   "silenceTimeoutSeconds": 30,
   "backgroundDenoisingEnabled": true,

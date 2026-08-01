@@ -197,13 +197,42 @@ function localDate(timeZone: string): string {
   }).format(new Date());
 }
 
-function classifyStatus(endedReason: string, durationSeconds: number): string {
+// Did the person on the other end actually say anything? A transcript is not
+// evidence of a conversation: a call answered into silence still transcribes
+// Etta's own greeting, and "the transcript is non-empty" quietly counted that
+// as a check-in. Only the customer's turns count.
+function hasHumanTurn(transcript: string | null): boolean {
+  if (!transcript) return false;
+  return transcript.split("\n").some((line) => {
+    const m = line.match(/^\s*(user|customer)\s*:\s*(.*)$/i);
+    return !!m && m[2].trim().length > 0;
+  });
+}
+
+// A call only counts as a check-in if a conversation demonstrably happened.
+// Providers report failures in inventive ways — a call that never connected
+// came back as "call.in-progress.twilio-completed-call" with no duration and
+// no transcript; one answered into silence came back as "silence-timed-out"
+// with 43 seconds and Etta's greeting. The dangerous direction of error is to
+// treat either as a successful check-in, because then the family is told
+// their parent is fine when nobody spoke to them, and no retry is attempted.
+// So require evidence, rather than enumerating every way it can go wrong.
+function classifyStatus(
+  endedReason: string,
+  durationSeconds: number,
+  spoke: boolean,
+  reachedSenior: boolean | null,
+): string {
   const r = endedReason.toLowerCase();
   if (
     r.includes("did-not-answer") || r.includes("no-answer") ||
     r.includes("busy") || r.includes("voicemail")
   ) return "no_answer";
   if (r.includes("error") || r.includes("failed")) return "failed";
+  // The analysis model's own verdict on whether it was really them. It sees
+  // the whole conversation, so when it says no, believe it.
+  if (reachedSenior === false) return "no_answer";
+  if (!spoke) return "no_answer";
   // Answered but hung up almost immediately — treat as unreached.
   if (durationSeconds > 0 && durationSeconds < 10) return "no_answer";
   return "completed";
@@ -480,6 +509,9 @@ async function handleAssistantRequest(message: any): Promise<Response> {
     return json({
       assistantId: MAIN_ASSISTANT_ID,
       assistantOverrides: {
+        // No transcriber override — see the note in place-due-calls. Per-call
+        // Deepgram keyterm boosting killed the call before the assistant
+        // started, and inbound would fail the same way.
         variableValues: {
           preferred_name: name,
           family_contact: familyContact,
@@ -647,7 +679,14 @@ Deno.serve(async (req) => {
         : 0),
   );
   const endedReason: string = message.endedReason ?? "";
-  const status = classifyStatus(endedReason, durationSeconds);
+  const transcript = message.artifact?.transcript ?? message.transcript ?? null;
+  const reached = message.analysis?.structuredData?.reached_senior;
+  const status = classifyStatus(
+    endedReason,
+    durationSeconds,
+    hasHumanTurn(transcript),
+    typeof reached === "boolean" ? reached : null,
+  );
 
   await supabase.from("calls").update({
     status,
@@ -655,11 +694,14 @@ Deno.serve(async (req) => {
     ended_at: message.endedAt ?? new Date().toISOString(),
     duration_seconds: durationSeconds || null,
     ended_reason: endedReason || null,
-    transcript: message.artifact?.transcript ?? message.transcript ?? null,
+    transcript,
     recording_url: message.artifact?.recordingUrl ?? message.recordingUrl ?? null,
   }).eq("id", call.id);
 
-  if (status === "no_answer") await handleNoAnswer(call);
+  // A failed call is a call that didn't happen, and the remedy is the same as
+  // for no answer: try again shortly, and tell the family if we run out of
+  // tries. Leaving it inert meant a provider error silently skipped a day.
+  if (status === "no_answer" || status === "failed") await handleNoAnswer(call);
   if (status === "completed") await handleCompleted(call, message);
 
   return json({ ok: true, status });
