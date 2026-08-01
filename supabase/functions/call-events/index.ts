@@ -492,12 +492,9 @@ async function handleAssistantRequest(message: any): Promise<Response> {
     return json({
       assistantId: MAIN_ASSISTANT_ID,
       assistantOverrides: {
-        transcriber: {
-          provider: "deepgram",
-          model: "nova-3",
-          language: "en",
-          keyterm: [name],
-        },
+        // No transcriber override — see the note in place-due-calls. Per-call
+        // Deepgram keyterm boosting killed the call before the assistant
+        // started, and inbound would fail the same way.
         variableValues: {
           preferred_name: name,
           family_contact: familyContact,

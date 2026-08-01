@@ -227,15 +227,16 @@ Deno.serve(async (req) => {
         customer: { number: senior.phone },
         metadata: { call_id: call.id, senior_id: senior.id },
         assistantOverrides: {
-          // Names are the one word that must not be misheard: the transcript
-          // had "Eila" as "Hila", which then propagated into the family's
-          // summary. Boost the name we already know we're about to say.
-          transcriber: {
-            provider: "deepgram",
-            model: "nova-3",
-            language: "en",
-            keyterm: [senior.preferred_name || senior.first_name],
-          },
+          // NO transcriber override here, deliberately. Boosting the senior's
+          // name with Deepgram's per-call `keyterm` fixed "Eila" being heard as
+          // "Hila" — but every call carrying it died before the assistant
+          // started: Vapi accepted the POST, Twilio connected and hung up ~13s
+          // later, endedReason "call.in-progress.twilio-completed-call",
+          // startedAt null, cost 0. Three calls without it connected fine; two
+          // with it failed. A name spelled wrong in a summary is a blemish; a
+          // call that never happens is the whole product failing. If this is
+          // revisited, prove it on a test number first — the API accepts the
+          // override and fails later, so a 200 from Vapi means nothing here.
           variableValues: {
             preferred_name: senior.preferred_name || senior.first_name,
             family_contact: senior.family.primary_contact_name,
