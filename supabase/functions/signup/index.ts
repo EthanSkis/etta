@@ -200,7 +200,7 @@ Deno.serve(async (req) => {
       timezone,
       notes,
       status: "pending_consent",
-    }).select("id").single();
+    }).select("id, setup_token").single();
   if (senErr || !senior) {
     console.error("senior insert failed:", senErr?.message);
     await supabase.from("families").delete().eq("id", family.id);
@@ -232,7 +232,11 @@ Deno.serve(async (req) => {
       "subscription_data[metadata][family_id]": family.id,
       "metadata[family_id]": family.id,
       allow_promotion_codes: "true",
-      success_url: `${SITE}/signup?started=1&who=${encodeURIComponent(parentName)}`,
+      // The setup token rides back from Stripe in the URL: the success page
+      // is a fresh page load with no memory of the form, and it needs to be
+      // able to say "call her now" without asking anyone to log in.
+      success_url: `${SITE}/signup?started=1&who=${encodeURIComponent(parentName)}` +
+        `&t=${senior.setup_token}`,
       cancel_url: `${SITE}/signup?canceled=1`,
     });
 
@@ -240,6 +244,7 @@ Deno.serve(async (req) => {
       ok: true,
       checkout_url: session.url as string,
       etta_number: ETTA_NUMBER_DISPLAY,
+      setup_token: senior.setup_token as string,
     });
   } catch (err) {
     // Payment setup failed: don't leave a half-made family behind.

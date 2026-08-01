@@ -5,5 +5,14 @@
     { "source": "/f/:token", "destination": "/api/f/:token" },
     { "source": "/b/:token", "destination": "/api/b/:token" },
     { "source": "/a/:token/:call", "destination": "/api/a/:token/:call" }
+  ],
+  "headers": [
+    {
+      "source": "/etta.vcf",
+      "headers": [
+        { "key": "Content-Type", "value": "text/vcard; charset=utf-8" },
+        { "key": "Content-Disposition", "value": "attachment; filename=\"Etta.vcf\"" }
+      ]
+    }
   ]
 }

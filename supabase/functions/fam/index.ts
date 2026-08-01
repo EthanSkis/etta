@@ -454,6 +454,10 @@ Deno.serve(async (req) => {
         "flags, tomorrow_topic)",
     )
     .eq("senior_id", senior.id)
+    // Check-ins only. The introduction call is how the service started, not a
+    // day of it — showing it as a missed or completed check-in would put a
+    // call that happened before consent into the record of calls after it.
+    .eq("kind", "check_in")
     // Retries in flight are included so today can say "still trying" rather
     // than "couldn't reach" — those are very different things to read about
     // your parent, and only one of them is true after a single missed ring.
