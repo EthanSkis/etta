@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
   const res = await fetch("https://api.stripe.com/v1/billing_portal/sessions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${Deno.env.get("STRIPE_SECRET_KEY")}`,
+      Authorization: `Bearer ${(Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim()}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({

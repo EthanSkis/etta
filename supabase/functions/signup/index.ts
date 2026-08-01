@@ -64,8 +64,14 @@ function cleanName(raw: unknown): string | null {
 // otherwise inscrutable: a key copied from Stripe's dashboard while still
 // masked contains a "…" (U+2026), and fetch rejects it as a non-ByteString
 // header long before Stripe ever sees it. Check the shape and say so plainly.
+function stripeKey(): string {
+  // Dashboard pastes routinely carry trailing newlines; a header value with
+  // one is rejected outright, so normalize before anything else touches it.
+  return (Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim();
+}
+
 function stripeKeyProblem(): string | null {
-  const key = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
+  const key = stripeKey();
   if (!key) return "STRIPE_SECRET_KEY is not set";
   if (/[^\x20-\x7E]/.test(key)) {
     return key.includes("…") || key.includes("...")
@@ -88,7 +94,7 @@ async function stripe(path: string, form: Record<string, string>): Promise<Recor
   const res = await fetch(`https://api.stripe.com/v1/${path}`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${Deno.env.get("STRIPE_SECRET_KEY")}`,
+      Authorization: `Bearer ${stripeKey()}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams(form),

@@ -72,7 +72,7 @@ async function stripe(path: string, body?: Record<string, string>): Promise<unkn
   const res = await fetch(`https://api.stripe.com/v1/${path}`, {
     method: body ? "POST" : "GET",
     headers: {
-      Authorization: `Bearer ${Deno.env.get("STRIPE_SECRET_KEY")}`,
+      Authorization: `Bearer ${(Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim()}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: body ? new URLSearchParams(body) : undefined,
@@ -148,7 +148,7 @@ async function syncSubscription(sub: any) {
 }
 
 Deno.serve(async (req) => {
-  const secret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+  const secret = (Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "").trim();
   const sig = req.headers.get("stripe-signature");
   const payload = await req.text();
   if (!secret || !sig || !(await verifySignature(payload, sig, secret))) {
@@ -197,7 +197,7 @@ Deno.serve(async (req) => {
         if (!active || active.length === 0) {
           await fetch(`https://api.stripe.com/v1/subscriptions/${object.id}`, {
             method: "DELETE",
-            headers: { Authorization: `Bearer ${Deno.env.get("STRIPE_SECRET_KEY")}` },
+            headers: { Authorization: `Bearer ${(Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim()}` },
           });
           if (family.primary_contact_phone) {
             await sendText([family.primary_contact_phone],

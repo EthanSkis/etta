@@ -128,7 +128,7 @@ async function familyPhones(
 // consent or revokes it: the product's promise is that you never keep paying
 // for calls your parent doesn't want. Idempotent — Stripe 404s are fine.
 async function cancelSubscription(familyId: string, reason: string) {
-  const key = Deno.env.get("STRIPE_SECRET_KEY");
+  const key = (Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim();
   if (!key) return;
   const { data: family } = await supabase.from("families")
     .select("stripe_subscription_id, subscription_status")
