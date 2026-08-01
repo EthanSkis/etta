@@ -55,6 +55,12 @@ function prose(s: string): string {
 
 // Mood → brand colour. Terracotta is reserved for low days and attention, so
 // it keeps meaning something when it appears.
+function clock(total: number): string {
+  if (!total || total < 0) return "--:--";
+  const m = Math.floor(total / 60), sec = Math.floor(total % 60);
+  return `${m}:${sec < 10 ? "0" : ""}${sec}`;
+}
+
 function moodColor(mood: number | null, urgent: boolean): string {
   if (urgent) return "#BC5127";
   if (mood === null) return "#B9AD9C";
@@ -249,9 +255,12 @@ details .panel{margin:0 0 14px;box-shadow:none;animation:none}
     audio.addEventListener("ended", function () {
       box.classList.remove("playing");
       fill.style.width = "0%";
+      time.textContent = time.dataset.full || mmss(audio.duration);
     });
     audio.addEventListener("loadedmetadata", function () {
-      time.textContent = mmss(audio.duration);
+      if (isFinite(audio.duration) && !time.dataset.full) {
+        time.textContent = mmss(audio.duration);
+      }
     });
     audio.addEventListener("timeupdate", function () {
       if (!audio.duration) return;
@@ -401,6 +410,7 @@ Deno.serve(async (req) => {
     completed: boolean;
     missed: boolean;
     minutes: number;
+    seconds: number;
     mood: number | null;
     urgent: boolean;
     slept: boolean | null;
@@ -414,7 +424,7 @@ Deno.serve(async (req) => {
     const date = c.scheduled_local_date as string;
     const cur = byDate.get(date) ?? {
       id: null, recordingShared: false,
-      date, completed: false, missed: false, minutes: 0, mood: null, urgent: false,
+      date, completed: false, missed: false, minutes: 0, seconds: 0, mood: null, urgent: false,
       slept: null, ate: null, meds: null, flags: [], summary: null,
     };
     if (c.status === "completed" && !cur.completed) {
@@ -427,6 +437,7 @@ Deno.serve(async (req) => {
       cur.id = c.id as string;
       cur.recordingShared = c.recording_shared === true;
       cur.minutes = Math.max(1, Math.round((c.duration_seconds ?? 60) / 60));
+      cur.seconds = (c.duration_seconds as number) ?? 0;
       if (s) {
         cur.summary = s.summary;
         cur.mood = s.mood_score;
@@ -500,7 +511,7 @@ Deno.serve(async (req) => {
 <svg class="ic-play"><use href="#i-play"/></svg><svg class="ic-pause"><use href="#i-pause"/></svg></button>
 <div class="track">
   <div class="track-bar"><div class="track-fill"></div></div>
-  <div class="track-meta"><b>Listen to the call</b><span class="t">--:--</span></div>
+  <div class="track-meta"><b>Listen to the call</b><span class="t" data-full="${clock(day.seconds)}">${clock(day.seconds)}</span></div>
 </div>
 <audio preload="none" src="${SITE}/a/${token}/${day.id}"></audio></div>`;
   }
