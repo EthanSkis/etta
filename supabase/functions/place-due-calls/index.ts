@@ -227,6 +227,15 @@ Deno.serve(async (req) => {
         customer: { number: senior.phone },
         metadata: { call_id: call.id, senior_id: senior.id },
         assistantOverrides: {
+          // Names are the one word that must not be misheard: the transcript
+          // had "Eila" as "Hila", which then propagated into the family's
+          // summary. Boost the name we already know we're about to say.
+          transcriber: {
+            provider: "deepgram",
+            model: "nova-3",
+            language: "en",
+            keyterm: [senior.preferred_name || senior.first_name],
+          },
           variableValues: {
             preferred_name: senior.preferred_name || senior.first_name,
             family_contact: senior.family.primary_contact_name,

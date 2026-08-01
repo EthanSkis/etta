@@ -480,6 +480,12 @@ async function handleAssistantRequest(message: any): Promise<Response> {
     return json({
       assistantId: MAIN_ASSISTANT_ID,
       assistantOverrides: {
+        transcriber: {
+          provider: "deepgram",
+          model: "nova-3",
+          language: "en",
+          keyterm: [name],
+        },
         variableValues: {
           preferred_name: name,
           family_contact: familyContact,
