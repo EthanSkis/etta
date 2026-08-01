@@ -9,7 +9,9 @@ Already provisioned — steps 1, 3 and 4 below are ✅ done:
 
 | Thing | Value |
 |---|---|
-| Vapi assistant "Etta" | `d7f28f40-69a4-4c85-ad22-512f39a14dc8` (claude-sonnet-5, Clara voice, webhook + secret set) |
+| Vapi assistant "Etta" | `d7f28f40-69a4-4c85-ad22-512f39a14dc8` (claude-haiku-4-5, Clara voice, webhook + secret set) |
+| Vapi assistant "Etta (setup)" | `0089b42e-799e-42c5-878a-2478387ae1de` (claude-haiku-4-5) — answers inbound consent calls |
+| ⚠️ Patching assistants | Vapi PATCH **replaces** a nested object wholesale: sending `{"model":{"model":"…"}}` silently drops the system prompt and temperature. Always send the complete `model` object (provider, model, temperature, messages). |
 | Twilio number | `+1 762 239 4275` ("Etta outbound", imported into Vapi) |
 | Vapi phone number id | `bf43dc1e-9d25-400c-87ef-607a51641419` |
 | Cron | `etta-place-due-calls`, every 10 min (pg_cron job 1) |
