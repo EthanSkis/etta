@@ -278,6 +278,17 @@ stored with `delivered_at` null and no text goes out.
 
 ## 3b. Deploying the functions
 
+**Live as of 2026-08-02.** Both migrations are applied. Deployed from the
+merged add-ons branch: `place-due-calls`, `audio`, `care-reports`,
+`retention-sweep`. Still running the pre-add-ons build, and deployed by the
+first run of the workflow below: `call-events`, `fam`, `signup`,
+`stripe-webhook`, plus `addons`, `report` and `share`, which do not exist on
+the project yet (so `/m/`, `/r/` and `/split/` 404 until then).
+
+Nothing is broken in the meantime — the new columns are additive and the old
+code ignores them — but the add-ons are not reachable until that run.
+
+
 `.github/workflows/deploy-functions.yml` deploys every edge function whenever
 `supabase/functions/**` changes on main. It needs one repository secret,
 `SUPABASE_ACCESS_TOKEN` (generate at
@@ -307,17 +318,9 @@ which would have failed every placement had a family been live.
 ## 4. Schedule the cron
 
 Three jobs, all authenticated with the same `CRON_SECRET` header. As of
-2026-08-02 all three exist on the project: `etta-place-due-calls` (every 10
-min) and `etta-care-reports` (hourly) are active, and `etta-retention-sweep`
-(04:40 daily) is scheduled but **inactive** until the `retention-sweep`
-function is deployed. Turn it on with:
-
-```sql
-select cron.alter_job(
-  (select jobid from cron.job where jobname = 'etta-retention-sweep'),
-  active := true
-);
-```
+2026-08-02 all three are scheduled and **active** on the project:
+`etta-place-due-calls` (every 10 min), `etta-care-reports` (hourly, acts only
+on the senior-local 1st), and `etta-retention-sweep` (04:40 daily).
 
 To create them from scratch: in the Supabase dashboard (SQL editor), enable
 `pg_cron` + `pg_net` (Database → Extensions), then:
