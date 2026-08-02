@@ -518,3 +518,46 @@ Note what none of this is sensitive to: effort. Diligence dominates the first
 years, and that phase is what produces the conversion, churn and CAC numbers
 everything above is guessing at. Past that point the timeline is set by capital
 and channel economics, not by hours worked.
+
+### Modelled: which worlds actually reach 60,000?
+
+`node scripts/sixty-k-scenarios.mjs`. Ten-year runs, acquisition in every channel
+scaled by remaining market share against an assumed 1.0M serviceable households,
+and CAC rising with penetration.
+
+| Scenario | Peak | Reaches 60k? |
+|---|---|---|
+| Bear — 65% churn, CAC $250 | 5,734 | never |
+| Base case (the channel chart) | 15,537 | never |
+| Same, but reinvest 50% of cash | 71,071 | 9.3 yr |
+| Payer-led — one plan at 2,000/mo | 108,276 | 5.8 yr |
+| Solid execution + payer | 334,715 | 5.2 yr |
+
+**The base case never gets there.** It plateaus around 15,500 — a quarter of the
+target — and no amount of additional time changes that.
+
+The reason is a threshold, not a gradient. Paid acquisition compounds only when
+reinvested cash buys subscribers faster than churn removes them:
+
+    reinvest × retained ÷ CAC  >  monthly churn
+
+Below that line the business plateaus; above it, it compounds without bound
+until the market saturates. Which is why changing one variable at a time mostly
+failed while the reinvestment rate alone flipped the outcome — 45% reinvestment
+peaks at 51,560 and never arrives, 50% reaches 60k. The required share:
+
+| Annual churn | CAC $100 | CAC $126 | CAC $200 | CAC $250 |
+|---|---|---|---|---|
+| 35% | 22% | 28% | 45% | 56% |
+| 40% | 26% | 33% | 53% | 66% |
+| 50% | 36% | 45% | 71% | 89% |
+| 65% | 53% | 67% | **106% — impossible** | **133% — impossible** |
+
+At 65% churn and a $250 CAC there is no reinvestment rate that works: acquiring
+a subscriber costs more than one ever returns, so the consumer engine cannot
+compound at any spend level. That is the honest bear case, and it is decided by
+two numbers that have never been measured here.
+
+The payer path is the exception to all of it — it reaches 60,000 without needing
+the paid engine to clear the threshold at all, because the subscribers arrive by
+contract rather than by purchase.
