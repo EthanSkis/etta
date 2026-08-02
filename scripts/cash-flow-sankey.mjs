@@ -25,6 +25,13 @@ const PER_SUB_REVENUE = 39.0;
 const PER_SUB_RETAINED = 15.69;   // gross margin less trial burn at 12-mo tenure
 const TARGET = argv.retained ? Number(argv.retained) : null;
 const SUBS = TARGET ? Math.ceil(TARGET / PER_SUB_RETAINED) : 1;
+// Standard nets less per subscriber ($9.62 margin less $9.82/12 of trial burn),
+// so it always needs more of them to reach the same retained figure.
+const STD_SUBS = TARGET ? Math.ceil(TARGET / (9.62 - 9.82 / 12)) : 0;
+const bigMoney = (n) => n >= 1e6
+  ? "$" + (n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1) + "M"
+  : "$" + Math.round(n / 1000) + "k";
+const slug = TARGET ? bigMoney(TARGET).replace(/[$.]/g, "").toLowerCase() : "";
 const K = SUBS;                    // every per-subscriber figure scales linearly
 const REVENUE = PER_SUB_REVENUE * K;
 
@@ -152,7 +159,7 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" 
 </style>
 <rect width="${W}" height="${H}" fill="var(--surface)"/>
 <text class="t" x="${M.left}" y="52">${TARGET
-  ? `What it takes to retain $${Math.round(TARGET / 1000)}k a month`
+  ? `What it takes to retain ${bigMoney(TARGET)} a month`
   : "Where one subscriber's $39 goes each month"}</text>
 <text class="st" x="${M.left}" y="80">${TARGET
   ? `${SUBS.toLocaleString("en-US")} Daily subscribers · $${Math.round(REVENUE).toLocaleString("en-US")}/mo gross revenue`
@@ -165,16 +172,18 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" 
 <text class="key" x="${M.left + 130}" y="126">money that leaves</text>
 
 ${links}${nodes}${labels}
-<text class="note" x="${M.left}" y="${H - 40}">Trial burn ($22.91 per paying customer, at 14 free days and 40% conversion) is spread over an assumed 12 months of tenure. Shorter tenure means a bigger slice — and more subscribers needed.</text>
-<text class="note" x="${M.left}" y="${H - 20}">${TARGET
-  ? "Linear in subscribers: every figure here is the per-subscriber flow multiplied by " + SUBS.toLocaleString("en-US") + ". On Standard it would take 11,362 subscribers instead."
+<text class="note" x="${M.left}" y="${H - 62}">Trial burn ($22.91 per paying customer, at 14 free days and 40% conversion) is spread over an assumed 12 months of tenure. Shorter tenure means a bigger slice — and more subscribers needed.</text>
+<text class="note" x="${M.left}" y="${H - 41}">${TARGET
+  ? "Linear in subscribers: every figure here is the per-subscriber flow multiplied by " + SUBS.toLocaleString("en-US") + ". On Standard it would take " + STD_SUBS.toLocaleString("en-US") + " subscribers instead."
   : "Gross margin is 45.1% of revenue; retained free cash after the trial is repaid is 40.2%."}</text>
+${TARGET ? `<text class="note" x="${M.left}" y="${H - 20}">Not modelled, and both grow with scale: Vapi per-line concurrency fees, and SMS throughput — at this volume the 10DLC daily segment ceiling is the binding constraint, not the price.</text>` : ""}
 </svg>`;
 
-writeFileSync(TARGET
-  ? "/home/user/etta/docs/cash-flow-sankey-100k.svg"
-  : "/home/user/etta/docs/cash-flow-sankey.svg", svg);
+const OUT = TARGET
+  ? `/home/user/etta/docs/cash-flow-sankey-${slug}.svg`
+  : "/home/user/etta/docs/cash-flow-sankey.svg";
+writeFileSync(OUT, svg);
 const leaves = [...byName.values()].filter((n) => !n.children.length);
-console.log("wrote", TARGET ? "docs/cash-flow-sankey-100k.svg" : "docs/cash-flow-sankey.svg", "—",
+console.log("wrote", OUT.replace("/home/user/etta/", ""), "—",
   "leaf total", money(leaves.reduce((s, n) => s + n.value, 0)), "vs revenue", money(REVENUE),
   "| retained", money(byName.get("Retained").value), "from", SUBS.toLocaleString("en-US"), "subscribers");

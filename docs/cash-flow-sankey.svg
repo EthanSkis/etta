@@ -90,6 +90,7 @@
 <text class="nv" x="883.72" y="761.7" text-anchor="start">$15.69 <tspan class="np">(40.2%)</tspan></text>
 <text class="ns" x="883.72" y="775.7" text-anchor="start">free cash</text>
 
-<text class="note" x="132" y="900">Trial burn ($22.91 per paying customer, at 14 free days and 40% conversion) is spread over an assumed 12 months of tenure. Shorter tenure means a bigger slice — and more subscribers needed.</text>
-<text class="note" x="132" y="920">Gross margin is 45.1% of revenue; retained free cash after the trial is repaid is 40.2%.</text>
+<text class="note" x="132" y="878">Trial burn ($22.91 per paying customer, at 14 free days and 40% conversion) is spread over an assumed 12 months of tenure. Shorter tenure means a bigger slice — and more subscribers needed.</text>
+<text class="note" x="132" y="899">Gross margin is 45.1% of revenue; retained free cash after the trial is repaid is 40.2%.</text>
+
 </svg>
