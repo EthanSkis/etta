@@ -8,7 +8,8 @@
 //
 // It also keeps the clock during a live call. The model has no sense of
 // elapsed time, so speech events are used as ticks and the wind-down
-// instructions are injected back into the call — see WRAPUP_STAGES.
+// instructions are injected back into the call — see handleWrapUp, which
+// times them against the budget that call was placed with.
 //
 // Family notifications are TEXT MESSAGES, deliberately: the senior needs no
 // app, and neither does the family — summaries arrive by SMS from Etta's own
@@ -679,8 +680,11 @@ async function handleCompleted(call: any, message: any) {
           : "they didn't say either way."
       }${alarm}\n— Etta`
       : `💌 Etta passed your message to ${name} today.\n\n${summaryText}${alarm}\n— Etta`;
+    // A2P 10DLC: a reminder call's note is the most recurring message this
+    // product sends, so it carries the standing opt-out like the rest.
+    const withOptOut = `${note}\nReply STOP to end texts.`;
 
-    const shortSent = await sendText(await familyPhones(call.senior_id), note);
+    const shortSent = await sendText(await familyPhones(call.senior_id), withOptOut);
     if (shortSent && summaryRow) {
       await supabase.from("call_summaries")
         .update({ delivered_at: new Date().toISOString() })
