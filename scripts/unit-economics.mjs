@@ -144,6 +144,44 @@ const usd = (n) => `$${n.toFixed(2)}`;
 const pct = (n, d) => `${((n / d) * 100).toFixed(0)}%`;
 
 // ---------------------------------------------------------------------------
+// --ltv : what a subscriber is worth over their life, and therefore what you
+// are allowed to spend acquiring one. This is the piece every other mode has
+// been deferring with the words "before CAC".
+//
+// Eldercare churn is structurally high and partly involuntary — seniors die,
+// move into care, or recover enough not to need it — so the honest range is
+// wide and skewed worse than a normal consumer subscription.
+// ---------------------------------------------------------------------------
+if (argv.ltv !== undefined) {
+  const plan = argv.plan ?? "daily";
+  const target = Number(argv.subs ?? 60000);
+  const opts = { ...base, minutes: Number(argv.minutes ?? 4.5) };
+  const m = monthlyCost(plan, opts);
+  const trial = trialDrag(plan, opts, Number(argv.conversion ?? 0.4), Number(argv.trialDays ?? 14));
+  const retained = m.margin - trial.perPayingCustomer / 12;   // 12-month amortisation
+
+  console.log(`\n${plan} retains $${retained.toFixed(2)}/subscriber/month after trial burn, ` +
+    `before acquisition cost.\n`);
+  console.log(`  churn/yr   avg life      LTV   max CAC   CAC at 3:1   replace/yr` +
+    `   acquisition spend/yr`);
+  for (const c of [0.3, 0.4, 0.5, 0.6, 0.7]) {
+    const ltv = retained * 12 / c, cac3 = ltv / 3, repl = target * c;
+    console.log(`    ${(c * 100).toFixed(0)}%      ${(1 / c).toFixed(1)} yr    ` +
+      `$${ltv.toFixed(0).padStart(4)}     $${ltv.toFixed(0).padStart(4)}         ` +
+      `$${cac3.toFixed(0).padStart(3)}      ${repl.toLocaleString("en-US").padStart(6)}` +
+      `          $${(repl * cac3 / 1e6).toFixed(1)}M`);
+  }
+  const annual = target * retained * 12;
+  console.log(`\n  At ${target.toLocaleString("en-US")} subscribers: $${(annual / 1e6).toFixed(1)}M/yr retained before CAC.`);
+  console.log(`\n  Note the acquisition column is FLAT. Holding LTV:CAC at 3:1 makes the`);
+  console.log(`  treadmill cost exactly one third of retained revenue no matter what churn is —`);
+  console.log(`  churn doesn't change the budget, it changes the CAC you're allowed to pay.`);
+  console.log(`  So the question is never "can we afford it", it's "can we acquire an`);
+  console.log(`  eldercare family for $${(retained * 12 / 0.5 / 3).toFixed(0)}".\n`);
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
 // --trial : what a trial that never converts actually costs.
 //
 // "Cancelled trial" is not one thing. A family that never gets their parent to

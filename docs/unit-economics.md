@@ -429,3 +429,52 @@ Sources for the vendor rates: [Vapi pricing](https://telnyx.com/resources/vapi-p
 [Twilio 2026 rate summary](https://automationatlas.io/answers/twilio-pricing-explained-2026/),
 [Vapi cost breakdown](https://zeeg.me/en/blog/post/vapi-ai-pricing).
 Anthropic list price for claude-haiku-4-5 is $1/MTok input, $5/MTok output.
+
+---
+
+## Can this reach 60,000 subscribers?
+
+The cost model says nothing about demand, so this section is where it ends and
+judgement begins. Two things are worth writing down anyway, because both are
+computable.
+
+**What a subscriber is worth.** `node scripts/unit-economics.mjs --ltv --subs=60000`:
+
+| Churn/yr | Avg life | LTV | CAC at 3:1 | Replace/yr to hold 60k | Acquisition spend/yr |
+|---|---|---|---|---|---|
+| 30% | 3.3 yr | $630 | $210 | 18,000 | $3.8M |
+| 40% | 2.5 yr | $473 | $158 | 24,000 | $3.8M |
+| 50% | 2.0 yr | $378 | $126 | 30,000 | $3.8M |
+| 60% | 1.7 yr | $315 | $105 | 36,000 | $3.8M |
+| 70% | 1.4 yr | $270 | $90 | 42,000 | $3.8M |
+
+60,000 subscribers retains **$11.3M/year before CAC**.
+
+The acquisition column is flat, and that is the useful part: holding LTV:CAC at
+3:1 makes the treadmill cost exactly one third of retained revenue whatever the
+churn. Churn does not change the budget — it changes the CAC you are *allowed*
+to pay. So the question is never "can we afford acquisition", it is **"can we
+acquire an eldercare family for about $126?"**
+
+Eldercare churn is structurally high and partly involuntary — seniors die, move
+into care, or recover enough not to need the calls — so 40–60% is the honest
+planning range, which puts the affordable CAC near $105–158 for a $39/month
+product carrying a real trust barrier. That is a demanding but not absurd
+target.
+
+**What the market research says.** From `elderly-check-in-market-landscape.txt`:
+at least five to eight vendors already sell this exact product, none has
+disclosed user numbers, the largest funding signal in the category is a $3.5M
+seed, and prices are being competed toward $10–30. 60,000 subscribers would be
+roughly $30M of ARR — an order of magnitude larger than the entire visible
+category. Nobody has done it here yet.
+
+The same document names the way out, and the business description already calls
+it Phase 3: **Papa reached 2.6M+ visits across 7,300 cities by selling
+per-member-per-month to Medicare Advantage plans**, not by acquiring consumers
+one at a time. On the consumer treadmill, holding 60,000 means signing ~30,000
+new families every year, forever. Through a payer, 60,000 members is two or
+three signatures.
+
+The consumer plans are how you prove retention and satisfaction. They are
+unlikely to be how you reach 60,000.
