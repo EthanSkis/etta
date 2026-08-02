@@ -1,0 +1,54 @@
+# Supabase CLI config.
+#
+# This exists mainly for one reason: every Etta function must deploy with
+# verify_jwt = false. None of them is called by a logged-in browser holding a
+# Supabase JWT — there are no logins in this product at all. Each authenticates
+# itself instead, and says how in its own header comment:
+#
+#   place-due-calls, care-reports, retention-sweep  X-Etta-Cron-Secret
+#   call-events                                     X-Vapi-Secret
+#   stripe-webhook                                  Stripe signature (HMAC)
+#   fam, addons, report, share, audio, billing      the capability token in the URL
+#   signup                                          public by design (honeypot + validation)
+#
+# Without this file the CLI would deploy them requiring a JWT, and every one of
+# those callers — Vapi, Stripe, the cron, and every family link — would start
+# getting 401s.
+
+project_id = "kkqgxojxsfqgfpzdyzjv"
+
+[functions.place-due-calls]
+verify_jwt = false
+
+[functions.call-events]
+verify_jwt = false
+
+[functions.signup]
+verify_jwt = false
+
+[functions.fam]
+verify_jwt = false
+
+[functions.audio]
+verify_jwt = false
+
+[functions.billing]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.addons]
+verify_jwt = false
+
+[functions.report]
+verify_jwt = false
+
+[functions.share]
+verify_jwt = false
+
+[functions.care-reports]
+verify_jwt = false
+
+[functions.retention-sweep]
+verify_jwt = false

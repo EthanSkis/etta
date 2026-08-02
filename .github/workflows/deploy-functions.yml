@@ -1,0 +1,68 @@
+# Deploy the edge functions when they change on main.
+#
+# Until now every function was uploaded by hand, which is how the repo and the
+# live project drift apart: `20260802120000_call_time_budget.sql` sat unapplied
+# for a day while the code that needed it was merged. Functions, at least,
+# should not depend on someone remembering.
+#
+# Migrations are deliberately NOT run here. Applying DDL to a production
+# database on every push is a different risk appetite than shipping a function,
+# and this project's migration versions don't line up with the repo filenames
+# anyway (they were applied through the dashboard). Run those deliberately —
+# see docs/launch-runbook.md.
+#
+# Setup, once: add a repository secret SUPABASE_ACCESS_TOKEN, generated at
+# https://supabase.com/dashboard/account/tokens. Nothing else is needed —
+# `verify_jwt` per function comes from supabase/config.toml, and the function
+# secrets (VAPI_*, TWILIO_*, STRIPE_*, CRON_SECRET) already live in the project.
+
+name: Deploy edge functions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/**"
+      - "supabase/config.toml"
+      - ".github/workflows/deploy-functions.yml"
+  # So a deploy can be re-run without an empty commit.
+  workflow_dispatch:
+
+concurrency:
+  # Two deploys racing would leave whichever finished last in charge, which is
+  # not necessarily the newest commit.
+  group: deploy-edge-functions
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: kkqgxojxsfqgfpzdyzjv
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Check the token is set
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "SUPABASE_ACCESS_TOKEN is not set as a repository secret."
+            echo "Generate one at https://supabase.com/dashboard/account/tokens"
+            echo "and add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      # Deploys every directory under supabase/functions that isn't _shared.
+      # The CLI bundles relative imports, so ../_shared/*.ts travels with each
+      # function exactly as it is in the repo — which is the whole point of
+      # doing this here rather than by hand.
+      - name: Deploy functions
+        run: supabase functions deploy --project-ref "$PROJECT_REF"
+
+      - name: What's live now
+        if: always()
+        run: supabase functions list --project-ref "$PROJECT_REF"

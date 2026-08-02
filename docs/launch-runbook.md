@@ -276,10 +276,54 @@ stored with `delivered_at` null and no text goes out.
 3. Save the returned assistant `id` as `VAPI_ASSISTANT_ID`, and the imported
    phone number's `id` as `VAPI_PHONE_NUMBER_ID` (step 2).
 
+## 3b. Deploying the functions
+
+**Live as of 2026-08-02.** Both migrations are applied. Deployed from the
+merged add-ons branch: `place-due-calls`, `audio`, `care-reports`,
+`retention-sweep`. Still running the pre-add-ons build, and deployed by the
+first run of the workflow below: `call-events`, `fam`, `signup`,
+`stripe-webhook`, plus `addons`, `report` and `share`, which do not exist on
+the project yet (so `/m/`, `/r/` and `/split/` 404 until then).
+
+Nothing is broken in the meantime — the new columns are additive and the old
+code ignores them — but the add-ons are not reachable until that run.
+
+
+`.github/workflows/deploy-functions.yml` deploys every edge function whenever
+`supabase/functions/**` changes on main. It needs one repository secret,
+`SUPABASE_ACCESS_TOKEN` (generate at
+https://supabase.com/dashboard/account/tokens, then Settings → Secrets and
+variables → Actions). Until that secret exists the workflow fails loudly on
+purpose rather than half-deploying.
+
+`supabase/config.toml` is what keeps `verify_jwt = false` on all of them.
+Nothing in this product is called by a browser holding a Supabase JWT — every
+function authenticates itself (cron secret, Vapi secret, Stripe signature, or
+the capability token in the URL). Deploy without that file and Vapi, Stripe,
+the cron and every family link start getting 401s.
+
+By hand, if you'd rather:
+
+```bash
+supabase functions deploy --project-ref kkqgxojxsfqgfpzdyzjv          # all of them
+supabase functions deploy addons --project-ref kkqgxojxsfqgfpzdyzjv   # just one
+```
+
+**Migrations are not automated**, deliberately: applying DDL on every push is a
+different risk appetite than shipping a function. Apply them yourself and keep
+them ahead of the code that needs them — `20260802120000_call_time_budget.sql`
+sat unapplied while the function that writes `control_url` was already merged,
+which would have failed every placement had a family been live.
+
 ## 4. Schedule the cron
 
-In the Supabase dashboard (SQL editor), enable `pg_cron` + `pg_net`
-(Database → Extensions), then:
+Three jobs, all authenticated with the same `CRON_SECRET` header. As of
+2026-08-02 all three are scheduled and **active** on the project:
+`etta-place-due-calls` (every 10 min), `etta-care-reports` (hourly, acts only
+on the senior-local 1st), and `etta-retention-sweep` (04:40 daily).
+
+To create them from scratch: in the Supabase dashboard (SQL editor), enable
+`pg_cron` + `pg_net` (Database → Extensions), then:
 
 ```sql
 select cron.schedule(
