@@ -21,14 +21,10 @@
 // creates nothing, places nothing.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { planFor } from "../_shared/catalog.ts";
+import { callBudget, planFor } from "../_shared/catalog.ts";
 
 const GRACE_MINUTES = 45; // place a due call up to 45 min late (cron gaps, downtime)
 const STALE_HOURS = 2;    // scheduled rows older than this are marked failed, not placed
-
-// A pill reminder is a reminder, not a visit: it should be over in a minute.
-// An occasion call is a delivery plus a little warmth, not a full check-in.
-const MAX_SECONDS_BY_KIND: Record<string, number> = { medication: 150, occasion: 420 };
 
 // Billing states that still get calls. past_due is deliberate: a card that
 // needs updating shouldn't cut off someone's daily check-in mid-retry.
@@ -281,6 +277,10 @@ Deno.serve(async (req) => {
 
     const kind = (call.kind as string) ?? "checkin";
     const plan = planFor(senior.family.plan);
+    // What this call may spend, and when Etta will be told to start closing.
+    // A Companion call is sold on being longer; a pill reminder is sold on
+    // being short. One fixed ceiling can't serve both.
+    const budget = callBudget(plan, kind);
     const name = senior.preferred_name || senior.first_name;
     const occasion = (Array.isArray(call.occasion) ? call.occasion[0] : call.occasion) as
       | { occasion: string; from_name: string; message: string }
@@ -317,7 +317,7 @@ Deno.serve(async (req) => {
         metadata: { call_id: call.id, senior_id: senior.id, kind },
         assistantOverrides: {
           ...(firstMessage ? { firstMessage } : {}),
-          maxDurationSeconds: MAX_SECONDS_BY_KIND[kind] ?? plan.maxCallSeconds,
+          maxDurationSeconds: budget.maxSeconds,
           // NO transcriber override here, deliberately. Boosting the senior's
           // name with Deepgram's per-call `keyterm` fixed "Eila" being heard as
           // "Hila" — but every call carrying it died before the assistant
@@ -360,7 +360,16 @@ Deno.serve(async (req) => {
     }
     const vapiCall = await res.json();
     await supabase.from("calls")
-      .update({ status: "in_progress", provider_call_id: vapiCall.id })
+      .update({
+        status: "in_progress",
+        provider_call_id: vapiCall.id,
+        // Vapi hands out the live-control endpoint exactly once, here. It is
+        // how call-events tells Etta to start wrapping up at the 5-minute
+        // mark; without it the only thing keeping calls short is the hard
+        // 7-minute cut, which lands mid-sentence.
+        control_url: vapiCall.monitor?.controlUrl ?? null,
+        time_budget_seconds: budget.maxSeconds,
+      })
       .eq("id", call.id);
     report.placed++;
   }

@@ -25,7 +25,12 @@ export interface PlanDef {
   monthlyCents: number;
   /** How many people get the after-call notes before seats are charged for. */
   includedRecipients: number;
-  /** Hard ceiling on a single call, passed to the voice provider. */
+  /**
+   * Hard ceiling on a single call, passed to the voice provider. This is a
+   * unit-economics number: voice minutes are the only materially variable
+   * cost in the product, so what a plan charges is what a call may spend.
+   * The wind-down nudges are derived from it — see callBudget.
+   */
   maxCallSeconds: number;
   /** Spoken guidance handed to Etta about how long to stay. */
   lengthGuidance: string;
@@ -41,8 +46,8 @@ export const PLANS: Record<PlanKey, PlanDef> = {
     days: [1, 3, 5],
     monthlyCents: 1900,
     includedRecipients: 2,
-    maxCallSeconds: 600,
-    lengthGuidance: "about 3 to 6 minutes",
+    maxCallSeconds: 420,
+    lengthGuidance: "about 3 to 5 minutes",
     priceEnv: "STRIPE_PRICE_STANDARD",
     fallbackPriceId: "price_1TzO26A8l4yd6OUzIGnqRkhB",
   },
@@ -53,8 +58,8 @@ export const PLANS: Record<PlanKey, PlanDef> = {
     days: [0, 1, 2, 3, 4, 5, 6],
     monthlyCents: 3900,
     includedRecipients: 5,
-    maxCallSeconds: 600,
-    lengthGuidance: "about 3 to 6 minutes",
+    maxCallSeconds: 420,
+    lengthGuidance: "about 3 to 5 minutes",
     priceEnv: "STRIPE_PRICE_DAILY",
     fallbackPriceId: "price_1TzO27A8l4yd6OUzhi1l2T3b",
   },
@@ -65,8 +70,9 @@ export const PLANS: Record<PlanKey, PlanDef> = {
     days: [0, 1, 2, 3, 4, 5, 6],
     monthlyCents: 6900,
     includedRecipients: 5,
-    // 15 minutes of conversation plus room to say goodbye properly.
-    maxCallSeconds: 1080,
+    // 15 minutes: the longer conversation this tier is sold on, with the
+    // wind-down landing at 13 minutes so the goodbye is never the cut-off.
+    maxCallSeconds: 900,
     lengthGuidance:
       "about 10 to 15 minutes — there is no hurry today, so let the " +
       "conversation breathe and follow whatever they want to talk about",
@@ -228,6 +234,39 @@ export async function resolveAddonPrice(addon: AddonDef): Promise<string> {
       addon.monthlyCents,
     );
 }
+
+/**
+ * A call's time budget: the hard ceiling, and the two moments the server
+ * tells Etta to start closing.
+ *
+ * The ceiling is priced, not conversational — see maxCallSeconds — and a call
+ * that simply dies at the ceiling mid-sentence is exactly the experience this
+ * product exists to avoid. So every budget reserves two minutes at the end:
+ * one to start winding down, one to say goodbye. Derived rather than fixed,
+ * because a 15-minute Companion call and a 90-second pill reminder cannot
+ * share a 5-minute nudge.
+ */
+export function callBudget(
+  plan: PlanDef,
+  kind: string,
+): { maxSeconds: number; windDownAt: number; goodbyeAt: number } {
+  const maxSeconds = KIND_MAX_SECONDS[kind] ?? plan.maxCallSeconds;
+  // Short calls get proportionally shorter warnings; there's no sense telling
+  // a 150-second reminder to start closing at 30 seconds.
+  const reserve = Math.min(120, Math.max(30, Math.round(maxSeconds * 0.3)));
+  return {
+    maxSeconds,
+    windDownAt: maxSeconds - reserve,
+    goodbyeAt: maxSeconds - Math.round(reserve / 2),
+  };
+}
+
+/**
+ * Ceilings that belong to the kind of call rather than the plan. A pill
+ * reminder is a reminder; an occasion call is a delivery plus a little
+ * warmth. Neither becomes longer because the family pays more.
+ */
+const KIND_MAX_SECONDS: Record<string, number> = { medication: 150, occasion: 420 };
 
 /** The lookup key a plan's price carries when we created it ourselves. */
 export function planLookupKey(plan: PlanDef): string {

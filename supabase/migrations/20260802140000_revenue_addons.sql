@@ -142,12 +142,24 @@ create index occasion_calls_family_idx on public.occasion_calls (family_id, crea
 comment on table public.occasion_calls is
   'One-off paid calls (birthday wishes, a message from the family). Placed only for seniors with live consent, like every other call.';
 
--- Calls carry which kind they are, and which occasion bought them.
+-- Calls carry which kind they are, which occasion bought them, and the time
+-- budget they were placed with.
+--
+-- The budget is stored rather than recomputed because the wind-down nudges
+-- (see call-events) are measured against it on every speech event, and
+-- because a plan change mid-call must not move the goalposts of a call
+-- already in progress. 20260802120000 gave every call a 7-minute ceiling with
+-- nudges at 5 and 6; those numbers are now derived per call, so a Companion
+-- call gets its 15 minutes and a pill reminder gets its 90 seconds.
 alter table public.calls
   add column kind        text not null default 'checkin'
     check (kind in ('checkin', 'evening', 'medication', 'occasion')),
   add column occasion_id uuid references public.occasion_calls (id) on delete set null,
-  add column recording_purged_at timestamptz;
+  add column recording_purged_at timestamptz,
+  add column time_budget_seconds integer;
+
+comment on column public.calls.time_budget_seconds is
+  'The hard ceiling this call was placed with, in seconds. Null for calls placed before budgets were per-call; call-events falls back to the check-in default.';
 
 -- One call per occasion per attempt; retries after a no-answer get their own
 -- attempt number, exactly as scheduled calls do.

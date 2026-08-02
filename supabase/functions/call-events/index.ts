@@ -6,6 +6,10 @@
 // revocation ("stop calling me" ends the service before the next call is
 // ever scheduled).
 //
+// It also keeps the clock during a live call. The model has no sense of
+// elapsed time, so speech events are used as ticks and the wind-down
+// instructions are injected back into the call — see WRAPUP_STAGES.
+//
 // Family notifications are TEXT MESSAGES, deliberately: the senior needs no
 // app, and neither does the family — summaries arrive by SMS from Etta's own
 // number. Requires TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN secrets; without
@@ -24,6 +28,53 @@ const MAX_ATTEMPTS = 3;        // 1 scheduled call + 2 retries
 // the day's check-in call is the escalation path, not this.
 const MED_MAX_ATTEMPTS = 2;
 const RETRY_DELAY_MINUTES = 30;
+
+// The call's time budget, spoken to Etta while she is still on the line.
+//
+// Vapi hangs up hard at maxDurationSeconds, which is what keeps a check-in
+// priced like a check-in. These two messages exist so that ceiling is never
+// what actually ends a call: Etta has no sense of elapsed time, so the server
+// keeps the clock for her and hands her the instruction to close while there
+// is still room to do it warmly.
+//
+// The moments are per call rather than fixed, because the ceiling is. A
+// Companion call is sold on being longer and a pill reminder on being short,
+// so a single 5-minute nudge would either cut the first one off or arrive
+// after the second one has already ended. place-due-calls records the budget
+// it placed the call with (see callBudget); this reads it back.
+const DEFAULT_BUDGET_SECONDS = 420; // calls placed before budgets were recorded
+
+const NOT_FROM_THEM =
+  "[System note. This is not from the person you are speaking with — do " +
+  "not read it aloud, do not mention it, and never talk about time limits.] ";
+
+/** What "you have been talking a while" means for this kind of call. */
+function elapsedPhrase(kind: string, minutes: number): string {
+  if (kind === "medication") {
+    return "This is a short reminder call, and it has run its length.";
+  }
+  if (kind === "occasion") {
+    return "You have passed the message along and had a warm moment with " +
+      "them, which is the whole errand of this call.";
+  }
+  return `You have been talking for about ${minutes} minutes, which is a full check-in.`;
+}
+
+function windDownMessage(kind: string, minutes: number): string {
+  return NOT_FROM_THEM + elapsedPhrase(kind, minutes) +
+    " Start closing now: finish the thread you are on, ask anything you still " +
+    "genuinely need to ask, then give your warm closing — recall something " +
+    "from the call, say when you'll call next — and end the call with your " +
+    "end-call tool. Open no new topics. If they are in the middle of a story, " +
+    "let them finish it; never cut them off.";
+}
+
+const GOODBYE_MESSAGE = NOT_FROM_THEM +
+  "This call has to end within the next minute. Say your goodbye on your " +
+  "very next turn: one warm closing line, no new questions, then use your " +
+  "end-call tool. If they are mid-sentence, let them finish it, then close. " +
+  "Closing now matters — if you don't, the line will simply drop, and being " +
+  "cut off mid-sentence is the worst way to leave them.";
 
 // The family page is served from our own domain, not the Supabase function
 // URL: Supabase rewrites text/html to text/plain on *.supabase.co, so the
@@ -101,6 +152,81 @@ async function findCall(message: any) {
     if (data) return data;
   }
   return null;
+}
+
+// Speaks to Etta while she is still on the call, through Vapi's per-call
+// live-control endpoint (stored at placement — Vapi returns it once and never
+// again). Called every time she stops speaking, which is both the safe seam to
+// hand her a new instruction and a natural clock tick.
+//
+// The conditional UPDATE is what makes it safe to call this ~20 times a call:
+// only the tick that actually crosses a threshold finds a row to update, so
+// each nudge goes out exactly once no matter how many events arrive.
+// deno-lint-ignore no-explicit-any
+async function handleWrapUp(message: any) {
+  const providerId = message?.call?.id;
+  if (!providerId) return;
+
+  const { data: call } = await supabase.from("calls")
+    .select("id, kind, started_at, wrapup_stage, control_url, time_budget_seconds")
+    .eq("provider_call_id", providerId)
+    .eq("status", "in_progress")
+    .maybeSingle();
+  // No started_at means the line hasn't connected yet: no clock to keep.
+  if (!call?.started_at) return;
+
+  const elapsed = (Date.now() - new Date(call.started_at as string).getTime()) / 1000;
+  const budget = (call.time_budget_seconds as number | null) ?? DEFAULT_BUDGET_SECONDS;
+  const kind = (call.kind as string) ?? "checkin";
+  const reserve = Math.min(120, Math.max(30, Math.round(budget * 0.3)));
+  const windDownAt = budget - reserve;
+
+  // Latest stage first — a call that somehow skipped a tick gets the message
+  // that matches where it actually is, not the one it missed.
+  const stages = [
+    { stage: 2, at: budget - Math.round(reserve / 2), content: GOODBYE_MESSAGE },
+    {
+      stage: 1,
+      at: windDownAt,
+      content: windDownMessage(kind, Math.round(windDownAt / 60)),
+    },
+  ];
+
+  for (const { stage, at, content } of stages) {
+    if (elapsed < at || (call.wrapup_stage as number) >= stage) continue;
+
+    const { data } = await supabase.from("calls")
+      .update({ wrapup_stage: stage })
+      .eq("id", call.id)
+      .lt("wrapup_stage", stage)
+      .select("control_url")
+      .maybeSingle();
+    if (!data) continue; // another tick got there first
+
+    const controlUrl = data.control_url ?? message?.call?.monitor?.controlUrl;
+    if (!controlUrl) {
+      console.error("wrap-up: no control url for call", providerId);
+      return;
+    }
+
+    const res = await fetch(controlUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "add-message",
+        message: { role: "system", content },
+        // Deliberately not triggering a reply. This lands just after Etta
+        // finished speaking, so the senior is likely about to — forcing a turn
+        // here would talk over them. The instruction sits in her context and
+        // shapes the answer she gives seconds later.
+        triggerResponseEnabled: false,
+      }),
+    });
+    if (!res.ok) {
+      console.error("wrap-up nudge failed:", stage, res.status, await res.text());
+    }
+    return;
+  }
 }
 
 async function familyPhones(
@@ -816,11 +942,26 @@ Deno.serve(async (req) => {
   if (message.type === "status-update") {
     if (message.status === "in-progress") {
       const call = await findCall(message);
-      if (call && call.status === "scheduled") {
+      // Gate on started_at, not on status: place-due-calls already flips the
+      // row to in_progress the moment Vapi accepts the POST, so a status check
+      // here never passed and started_at stayed null until the call was over.
+      // It is the only record of when the line actually connected, and the
+      // wrap-up clock is measured from it.
+      if (call && !call.started_at) {
         await supabase.from("calls")
           .update({ status: "in_progress", started_at: new Date().toISOString() })
           .eq("id", call.id);
       }
+    }
+    return json({ ok: true });
+  }
+
+  if (message.type === "speech-update") {
+    // Only when Etta stops talking. That is the seam where a new instruction
+    // can land without interrupting anyone, and it keeps this to roughly one
+    // tick per turn instead of one per speech transition.
+    if (message.status === "stopped" && message.role === "assistant") {
+      await handleWrapUp(message);
     }
     return json({ ok: true });
   }

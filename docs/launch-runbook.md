@@ -130,7 +130,11 @@ cron (every 10 min)
         creates a `calls` row, POSTs to Vapi ─▶ Vapi + Twilio dial the senior
                                                   │  Etta talks (agent/etta-system-prompt.md)
                                                   ▼
-      edge fn: call-events  ◀── Vapi end-of-call report (transcript + analysis)
+      edge fn: call-events  ◀── Vapi speech-update (each time Etta stops talking)
+                                  at the call's wind-down → "start closing" ─▶ back
+                                  a minute later → "say goodbye now"  into the call
+                                                                (monitor.controlUrl)
+                            ◀── Vapi end-of-call report (transcript + analysis)
         stores outcome + call_summaries
         texts the family note (Twilio SMS, from Etta's own number)
         no answer → retry in 30 min (×3) → escalation text to contact chain
@@ -147,6 +151,61 @@ the family's own pages (capability tokens, no login):
   /r/<token>      monthly report     /b/<token>      Stripe portal
   /split/<token>  a sibling's share of the bill
 ```
+
+### The call's time budget
+
+A check-in is priced as a short call, so it has a hard ceiling:
+`maxDurationSeconds: 420` on the assistant. Seven minutes is the backstop, not
+the plan — Vapi cutting the line mid-sentence is the worst possible ending, so
+the server keeps a clock the model doesn't have and injects two system notes
+through `monitor.controlUrl`: wind down at 5:00, say goodbye at 6:00. Etta
+ends the call herself with the end-call tool; the cap should almost never fire.
+
+**The ceiling is now per call, not per assistant.** 420 is the default and
+what an everyday check-in gets; `callBudget` in `_shared/catalog.ts` derives
+the rest from the plan and the kind of call — 900 seconds on Companion, which
+is the tier that sells a longer conversation, and 150 on a medication
+reminder, which is over in a minute. `place-due-calls` sends it as a per-call
+override and records it in `calls.time_budget_seconds`; the two nudges are
+then measured against that number rather than a fixed 5:00, so they always
+land with a couple of minutes to spare whatever the call's own ceiling is.
+
+Four things this depends on, if you're changing it:
+
+- **`speech-update` must stay in the assistant's `serverMessages`.** It is the
+  only clock tick. Drop it and calls silently run to the 7-minute guillotine.
+- **`calls.control_url` is written once, at placement.** Vapi returns
+  `monitor.controlUrl` in the POST /call response and nowhere else.
+- **Run `20260802120000_call_time_budget.sql` before deploying either
+  function** — `place-due-calls` writes `control_url` and `call-events` writes
+  `wrapup_stage`, and against an old schema every placement fails. The same
+  goes for `20260802140000_revenue_addons.sql`, which adds
+  `calls.time_budget_seconds`.
+- **A call keeps the budget it was placed with.** Switching plans mid-call
+  can't move the goalposts on a conversation already in progress, which is why
+  the number is stored on the row rather than recomputed on every tick.
+
+Patch the live assistant to match (both fields are top-level, so the
+replaces-nested-objects trap above doesn't apply):
+
+```
+curl -X PATCH https://api.vapi.ai/assistant/$VAPI_ASSISTANT_ID \
+  -H "Authorization: Bearer $VAPI_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"maxDurationSeconds":420,
+       "serverMessages":["end-of-call-report","status-update","speech-update"]}'
+```
+
+`agent/etta-system-prompt.md` changed too — it now tells Etta what the system
+notes are and how to act on them. Patch that separately, sending the **whole**
+`model` object (provider, model, temperature, messages, tools) per the warning
+above; a note she hasn't been told about reads like the senior said it.
+
+The same change fixes `calls.started_at`, which was never being set at connect
+time: `place-due-calls` flips the row to `in_progress` as soon as Vapi accepts
+the POST, so the status-update handler's `status === 'scheduled'` check never
+passed and the column stayed null until the end-of-call report backfilled it.
+The wrap-up clock measures from it, so it now fills on the first in-progress
+event instead.
 
 Supabase project: `kkqgxojxsfqgfpzdyzjv` (same one that holds the waitlist).
 All product tables are RLS-locked to the service role — nothing is reachable
@@ -310,7 +369,7 @@ yes → calls → first charge. The code keeps that promise on every branch:
 
 Plans map to frequency: `standard` ($19) = Mon/Wed/Fri, `daily` ($39) and
 `companion` ($69) = every day, with Companion also raising the per-call
-ceiling to 18 minutes. Families manage card and cancellation through the
+ceiling to 15 minutes (wind-down at 13). Families manage card and cancellation through the
 Stripe portal, reached from the "Manage billing" link on their family page —
 no login, same capability-token model as the page itself.
 

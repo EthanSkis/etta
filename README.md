@@ -13,7 +13,7 @@ consent, always. Full concept: [`business-description.md`](business-description.
 | `brand/etta-instagram-profile.png` | Instagram profile picture (1024×1024, `etta.` wordmark, centred for the circular crop) |
 | `supabase/migrations/` | Product database schema: families, seniors, append-only consent log, schedules, calls, summaries, escalations |
 | `supabase/functions/place-due-calls/` | Scheduler (cron, every 10 min): timezone-aware "whose check-in time is it?", consent check, places calls via Vapi |
-| `supabase/functions/call-events/` | Vapi webhook: call outcomes, family summary texts (SMS from Etta's own number — no app, no inbox), no-answer retries + escalation, inbound consent calls, immediate in-call revocation |
+| `supabase/functions/call-events/` | Vapi webhook: call outcomes, family summary texts (SMS from Etta's own number — no app, no inbox), no-answer retries + escalation, inbound consent calls, immediate in-call revocation, and the call's time budget (wind-down notes injected mid-call, timed to whatever ceiling that call was placed with) |
 | `supabase/functions/signup/` | Public signup: creates family/senior/schedule (pending consent) and returns a Stripe Checkout URL |
 | `supabase/functions/fam/` | The family's no-login web view — magic link, 14-day mood strip, per-call cards |
 | `supabase/functions/addons/` | "Your plan" (`/m/<token>`): add or drop a second parent, evening calls, medication reminders, care report, call archive, note recipients, occasion calls, concierge — and split the bill with siblings |
@@ -23,7 +23,7 @@ consent, always. Full concept: [`business-description.md`](business-description.
 | `supabase/functions/_shared/` | The price list (`catalog.ts`), Stripe calls, SMS, form validation, the shared page shell |
 | `supabase/functions/stripe-webhook/`, `supabase/functions/billing/` | Subscription sync (and the no-consent-no-charge rules), plus the customer-portal redirect |
 | `agent/etta-system-prompt.md` | Etta's conversation design — disclosure, tone, question bank, safety, scam protection, revocation |
-| `agent/vapi-assistant.json` | The Vapi assistant definition, incl. structured post-call analysis schema |
+| `agent/vapi-assistant.json` | The Vapi assistant definition, incl. structured post-call analysis schema and the 7-minute hard cap on call length |
 | `docs/launch-runbook.md` | Step-by-step from here to the first real call (accounts, secrets, cron, consent script, legal gate) |
 | `*.pdf` / `*.txt` | Market landscape and AI-disclosure-law research |
 
