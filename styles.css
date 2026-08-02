@@ -104,6 +104,7 @@ h1 em{font-style:italic;color:var(--terra)}
   line-height:1.1;letter-spacing:-.02em;margin-bottom:18px;max-width:20em;
 }
 .page-hero.center{text-align:center}
+.center{text-align:center}
 .page-hero.center .page-title{margin-inline:auto}
 .page-hero.center .sec-lede{margin-inline:auto}
 
@@ -241,6 +242,28 @@ h2{font-family:var(--serif);font-weight:500;font-size:clamp(1.9rem,3.6vw,2.7rem)
 .plan li::before{content:"—";position:absolute;left:2px;color:var(--terra);font-weight:700}
 .plan .btn{width:100%;text-align:center}
 .plans-note{text-align:center;color:var(--ink-soft);font-size:.9rem;margin-top:26px}
+
+/* three plans side by side: Standard, Daily, Companion */
+.plans.three{grid-template-columns:repeat(3,1fr);max-width:1060px;gap:22px}
+.plans.three .plan{padding:34px 26px}
+.plans.three .price{font-size:2.6rem;margin-bottom:20px}
+.plans.three .plan li{font-size:.92rem;padding:8px 0 8px 26px}
+
+/* add-ons: the things a family can bolt on later */
+.addons{max-width:900px;margin:40px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.addon-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px}
+.addon-card h4{
+  font-family:var(--serif);font-size:1.14rem;font-weight:600;
+  display:flex;justify-content:space-between;align-items:baseline;gap:14px;
+}
+.addon-card h4 em{font-family:var(--sans);font-style:normal;font-size:.95rem;
+  font-weight:600;color:var(--terra-deep);white-space:nowrap}
+.addon-card p{color:var(--ink-soft);font-size:.93rem;margin-top:8px;line-height:1.6}
+.addon-note{max-width:900px;margin:22px auto 0;text-align:center;color:var(--ink-soft);
+  font-size:.9rem;line-height:1.7}
+.addon-note b{color:var(--ink)}
+@media(max-width:920px){.plans.three{grid-template-columns:1fr;max-width:520px}}
+@media(max-width:720px){.addons{grid-template-columns:1fr}}
 
 /* faq */
 .faq{max-width:720px;margin:44px auto 0}

@@ -4,6 +4,9 @@
   "rewrites": [
     { "source": "/f/:token", "destination": "/api/f/:token" },
     { "source": "/b/:token", "destination": "/api/b/:token" },
+    { "source": "/m/:token", "destination": "/api/m/:token" },
+    { "source": "/r/:token", "destination": "/api/r/:token" },
+    { "source": "/split/:token", "destination": "/api/split/:token" },
     { "source": "/a/:token/:call", "destination": "/api/a/:token/:call" }
   ]
 }

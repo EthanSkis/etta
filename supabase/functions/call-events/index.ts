@@ -8,7 +8,8 @@
 //
 // It also keeps the clock during a live call. The model has no sense of
 // elapsed time, so speech events are used as ticks and the wind-down
-// instructions are injected back into the call — see WRAPUP_STAGES.
+// instructions are injected back into the call — see handleWrapUp, which
+// times them against the budget that call was placed with.
 //
 // Family notifications are TEXT MESSAGES, deliberately: the senior needs no
 // app, and neither does the family — summaries arrive by SMS from Etta's own
@@ -19,45 +20,62 @@
 // header; must match VAPI_WEBHOOK_SECRET.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { ADDONS, resolveAddonPrice } from "../_shared/catalog.ts";
+import { addSubscriptionItem, removeSubscriptionItem, stripe } from "../_shared/stripe.ts";
+import { sendText } from "../_shared/sms.ts";
 
 const MAX_ATTEMPTS = 3;        // 1 scheduled call + 2 retries
+// A pill reminder that goes unanswered gets one more try and then lets it be:
+// the day's check-in call is the escalation path, not this.
+const MED_MAX_ATTEMPTS = 2;
 const RETRY_DELAY_MINUTES = 30;
-const DEFAULT_FROM_NUMBER = "+17622394275"; // "Etta outbound" — same number Etta calls from
 
-// The call's time budget. Vapi hangs up hard at maxDurationSeconds (420 — see
-// agent/vapi-assistant.json), which keeps a check-in priced like a check-in.
-// These two messages exist so that ceiling is never what actually ends a call:
-// Etta has no sense of elapsed time, so the server keeps the clock for her and
-// hands her the instruction to close while there is still room to do it warmly.
-// Latest stage first — a call that somehow skipped a tick gets the message that
-// matches where it actually is, not the one it missed.
-const WRAPUP_STAGES = [
-  {
-    stage: 2,
-    afterSeconds: 360, // 6:00 — a full minute of room before the 7:00 cut
-    content:
-      "[System note. This is not from the person you are speaking with — do " +
-      "not read it aloud, do not mention it, and never talk about time limits.] " +
-      "This call has to end within the next minute. Say your goodbye on your " +
-      "very next turn: one warm closing line, no new questions, then use your " +
-      "end-call tool. If they are mid-sentence, let them finish it, then close. " +
-      "Closing now matters — if you don't, the line will simply drop, and being " +
-      "cut off mid-sentence is the worst way to leave them.",
-  },
-  {
-    stage: 1,
-    afterSeconds: 300, // 5:00 — a complete check-in; start winding down
-    content:
-      "[System note. This is not from the person you are speaking with — do " +
-      "not read it aloud, do not mention it, and never talk about time limits.] " +
-      "You have been talking for about five minutes, which is a full check-in. " +
-      "Start closing now: finish the thread you are on, ask anything you still " +
-      "genuinely need to ask, then give your warm closing — recall something " +
-      "from the call, say when you'll call next — and end the call with your " +
-      "end-call tool. Open no new topics. If they are in the middle of a story, " +
-      "let them finish it; never cut them off.",
-  },
-];
+// The call's time budget, spoken to Etta while she is still on the line.
+//
+// Vapi hangs up hard at maxDurationSeconds, which is what keeps a check-in
+// priced like a check-in. These two messages exist so that ceiling is never
+// what actually ends a call: Etta has no sense of elapsed time, so the server
+// keeps the clock for her and hands her the instruction to close while there
+// is still room to do it warmly.
+//
+// The moments are per call rather than fixed, because the ceiling is. A
+// Companion call is sold on being longer and a pill reminder on being short,
+// so a single 5-minute nudge would either cut the first one off or arrive
+// after the second one has already ended. place-due-calls records the budget
+// it placed the call with (see callBudget); this reads it back.
+const DEFAULT_BUDGET_SECONDS = 420; // calls placed before budgets were recorded
+
+const NOT_FROM_THEM =
+  "[System note. This is not from the person you are speaking with — do " +
+  "not read it aloud, do not mention it, and never talk about time limits.] ";
+
+/** What "you have been talking a while" means for this kind of call. */
+function elapsedPhrase(kind: string, minutes: number): string {
+  if (kind === "medication") {
+    return "This is a short reminder call, and it has run its length.";
+  }
+  if (kind === "occasion") {
+    return "You have passed the message along and had a warm moment with " +
+      "them, which is the whole errand of this call.";
+  }
+  return `You have been talking for about ${minutes} minutes, which is a full check-in.`;
+}
+
+function windDownMessage(kind: string, minutes: number): string {
+  return NOT_FROM_THEM + elapsedPhrase(kind, minutes) +
+    " Start closing now: finish the thread you are on, ask anything you still " +
+    "genuinely need to ask, then give your warm closing — recall something " +
+    "from the call, say when you'll call next — and end the call with your " +
+    "end-call tool. Open no new topics. If they are in the middle of a story, " +
+    "let them finish it; never cut them off.";
+}
+
+const GOODBYE_MESSAGE = NOT_FROM_THEM +
+  "This call has to end within the next minute. Say your goodbye on your " +
+  "very next turn: one warm closing line, no new questions, then use your " +
+  "end-call tool. If they are mid-sentence, let them finish it, then close. " +
+  "Closing now matters — if you don't, the line will simply drop, and being " +
+  "cut off mid-sentence is the worst way to leave them.";
 
 // The family page is served from our own domain, not the Supabase function
 // URL: Supabase rewrites text/html to text/plain on *.supabase.co, so the
@@ -120,34 +138,6 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-// Sends one SMS per recipient. True only if every send succeeded.
-async function sendText(to: string[], body: string): Promise<boolean> {
-  const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
-  const token = Deno.env.get("TWILIO_AUTH_TOKEN");
-  const from = Deno.env.get("TWILIO_FROM_NUMBER") ?? DEFAULT_FROM_NUMBER;
-  if (!sid || !token || to.length === 0) return false;
-
-  let allOk = true;
-  for (const number of to) {
-    const res = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: "Basic " + btoa(`${sid}:${token}`),
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({ From: from, To: number, Body: body }),
-      },
-    );
-    if (!res.ok) {
-      console.error("twilio sms failed:", number, res.status, await res.text());
-      allOk = false;
-    }
-  }
-  return allOk;
-}
-
 // deno-lint-ignore no-explicit-any
 async function findCall(message: any) {
   const metaCallId = message?.call?.metadata?.call_id;
@@ -178,17 +168,41 @@ async function handleWrapUp(message: any) {
   const providerId = message?.call?.id;
   if (!providerId) return;
 
-  for (const { stage, afterSeconds, content } of WRAPUP_STAGES) {
-    const cutoff = new Date(Date.now() - afterSeconds * 1000).toISOString();
+  const { data: call } = await supabase.from("calls")
+    .select("id, kind, started_at, wrapup_stage, control_url, time_budget_seconds")
+    .eq("provider_call_id", providerId)
+    .eq("status", "in_progress")
+    .maybeSingle();
+  // No started_at means the line hasn't connected yet: no clock to keep.
+  if (!call?.started_at) return;
+
+  const elapsed = (Date.now() - new Date(call.started_at as string).getTime()) / 1000;
+  const budget = (call.time_budget_seconds as number | null) ?? DEFAULT_BUDGET_SECONDS;
+  const kind = (call.kind as string) ?? "checkin";
+  const reserve = Math.min(120, Math.max(30, Math.round(budget * 0.3)));
+  const windDownAt = budget - reserve;
+
+  // Latest stage first — a call that somehow skipped a tick gets the message
+  // that matches where it actually is, not the one it missed.
+  const stages = [
+    { stage: 2, at: budget - Math.round(reserve / 2), content: GOODBYE_MESSAGE },
+    {
+      stage: 1,
+      at: windDownAt,
+      content: windDownMessage(kind, Math.round(windDownAt / 60)),
+    },
+  ];
+
+  for (const { stage, at, content } of stages) {
+    if (elapsed < at || (call.wrapup_stage as number) >= stage) continue;
+
     const { data } = await supabase.from("calls")
       .update({ wrapup_stage: stage })
-      .eq("provider_call_id", providerId)
-      .eq("status", "in_progress")
+      .eq("id", call.id)
       .lt("wrapup_stage", stage)
-      .lte("started_at", cutoff) // null started_at never matches: good, no clock yet
       .select("control_url")
       .maybeSingle();
-    if (!data) continue;
+    if (!data) continue; // another tick got there first
 
     const controlUrl = data.control_url ?? message?.call?.monitor?.controlUrl;
     if (!controlUrl) {
@@ -269,6 +283,91 @@ async function cancelSubscription(familyId: string, reason: string) {
     type: "etta.subscription_canceled",
     detail: { reason, subscription: subId },
   });
+}
+
+/**
+ * A second parent said yes — so now, and not a moment before, they become a
+ * line on the family's bill.
+ *
+ * The add-on was created 'pending_consent' when the family added them (see
+ * the addons function). This is the other half of the promise the first
+ * parent already got: no charge for calls nobody has agreed to receive.
+ *
+ * A billing failure here must never stop the calls. The senior consented;
+ * that stands. The add-on simply stays pending and unbilled, which errs
+ * against us rather than against them.
+ */
+async function activateParentAddon(seniorId: string, familyId: string) {
+  const { data: addon } = await supabase.from("subscription_addons")
+    .select("id").eq("senior_id", seniorId)
+    .eq("addon_key", "second_parent").eq("status", "pending_consent").maybeSingle();
+  if (!addon) return;
+
+  const { data: family } = await supabase.from("families")
+    .select("stripe_subscription_id, subscription_status").eq("id", familyId).maybeSingle();
+
+  const patch: Record<string, unknown> = {
+    status: "active",
+    activated_at: new Date().toISOString(),
+  };
+
+  if (family?.subscription_status !== "comped" && family?.stripe_subscription_id) {
+    try {
+      const def = ADDONS.second_parent;
+      const price = await resolveAddonPrice(def);
+      const item = await addSubscriptionItem(family.stripe_subscription_id, price, 1);
+      patch.stripe_item_id = item.id;
+      patch.stripe_price_id = price;
+      patch.unit_amount_cents = def.monthlyCents;
+    } catch (err) {
+      console.error("second parent billing failed (calls continue):", seniorId, err);
+      return;
+    }
+  }
+
+  await supabase.from("subscription_addons").update(patch).eq("id", addon.id);
+  await supabase.from("billing_events").insert({
+    family_id: familyId,
+    type: "etta.addon_activated",
+    detail: { addon: "second_parent", senior_id: seniorId },
+  });
+}
+
+/**
+ * Stop billing for ONE senior when they decline or revoke.
+ *
+ * With more than one parent on an account, "they said stop" must not cancel
+ * the whole subscription — the other parent's calls have nothing to do with
+ * it. So: a senior who arrived as an add-on takes only their own add-on with
+ * them; the senior the account was opened for takes the subscription.
+ *
+ * Returns which of the two happened, because the family's text has to say
+ * the true thing about their bill.
+ */
+async function stopBillingForSenior(
+  seniorId: string,
+  familyId: string,
+  reason: string,
+): Promise<"addon" | "subscription"> {
+  const { data: addon } = await supabase.from("subscription_addons")
+    .select("id, stripe_item_id").eq("senior_id", seniorId)
+    .eq("addon_key", "second_parent").neq("status", "canceled").maybeSingle();
+
+  if (!addon) {
+    await cancelSubscription(familyId, reason);
+    return "subscription";
+  }
+
+  if (addon.stripe_item_id) await removeSubscriptionItem(addon.stripe_item_id as string);
+  await supabase.from("subscription_addons")
+    .update({ status: "canceled", canceled_at: new Date().toISOString() })
+    .eq("id", addon.id);
+  await supabase.from("billing_events").insert({
+    family_id: familyId,
+    type: "etta.addon_removed",
+    detail: { addon: "second_parent", senior_id: seniorId, reason },
+  });
+  return "addon";
 }
 
 // "09:00:00" → "9 in the morning", "12:30:00" → "12:30 in the afternoon"
@@ -356,12 +455,16 @@ async function handleRevocation(call: any, structured: any) {
     .select("first_name, preferred_name, family_id")
     .eq("id", call.senior_id).maybeSingle();
   const name = senior?.preferred_name || senior?.first_name || "your parent";
-  if (senior?.family_id) await cancelSubscription(senior.family_id, "senior_revoked_consent");
+  const stopped = senior?.family_id
+    ? await stopBillingForSenior(call.senior_id, senior.family_id, "senior_revoked_consent")
+    : "subscription";
   const sent = await sendText(
     await familyPhones(call.senior_id),
     `Etta update: on today's call, ${name} asked Etta to stop calling — and Etta ` +
-      `honored that right away, as promised. No more calls will be placed, and ` +
-      `your subscription is canceled so you won't be billed again. ` +
+      `honored that right away, as promised. No more calls will be placed to ${name}, ` +
+      (stopped === "subscription"
+        ? `and your subscription is canceled so you won't be billed again. `
+        : `and their part of the bill ends today — the rest of your account carries on. `) +
       `It might be a passing mood or a real preference; a gentle conversation is ` +
       `usually the best next step. If ${name} wants the calls again, it just takes ` +
       `a fresh yes from them. — Etta`,
@@ -375,7 +478,10 @@ async function handleRevocation(call: any, structured: any) {
 
 // deno-lint-ignore no-explicit-any
 async function handleNoAnswer(call: any) {
-  if (call.attempt_number < MAX_ATTEMPTS) {
+  const kind = call.kind ?? "checkin";
+  const maxAttempts = kind === "medication" ? MED_MAX_ATTEMPTS : MAX_ATTEMPTS;
+
+  if (call.attempt_number < maxAttempts) {
     const retryAt = new Date(Date.now() + RETRY_DELAY_MINUTES * 60_000);
     const { error } = await supabase.from("calls").insert({
       senior_id: call.senior_id,
@@ -383,10 +489,47 @@ async function handleNoAnswer(call: any) {
       scheduled_for: retryAt.toISOString(),
       scheduled_local_date: call.scheduled_local_date,
       attempt_number: call.attempt_number + 1,
+      // A retry is the same call, so it keeps its kind and its errand.
+      kind,
+      occasion_id: call.occasion_id ?? null,
     });
     if (error && !error.message.includes("duplicate")) {
       console.error("retry insert failed:", error.message);
     }
+    return;
+  }
+
+  // A missed pill reminder isn't news on its own — the check-in call is what
+  // tells the family whether anything is actually wrong.
+  if (kind === "medication") return;
+
+  // A message the family paid to have delivered, undelivered: tell them
+  // plainly, and don't dress it up as an alarm about their parent.
+  if (kind === "occasion" && call.occasion_id) {
+    const { data: occ } = await supabase.from("occasion_calls")
+      .select("stripe_payment_intent").eq("id", call.occasion_id).maybeSingle();
+    // Undelivered means unpaid for: refund it without being asked.
+    let refunded = false;
+    if (occ?.stripe_payment_intent) {
+      try {
+        await stripe("refunds", { payment_intent: occ.stripe_payment_intent });
+        refunded = true;
+      } catch (err) {
+        console.error("occasion refund failed:", err);
+      }
+    }
+    await supabase.from("occasion_calls")
+      .update({ status: "no_answer" }).eq("id", call.occasion_id);
+    const { data: s } = await supabase.from("seniors")
+      .select("first_name, preferred_name").eq("id", call.senior_id).maybeSingle();
+    const who = s?.preferred_name || s?.first_name || "your parent";
+    await sendText(
+      await familyPhones(call.senior_id),
+      `Etta here — I tried ${who} a few times today and couldn't get through, so ` +
+        `your message wasn't delivered.${
+          refunded ? " I've refunded it." : ""
+        } Reply to this number if you'd like me to try again another day. — Etta`,
+    );
     return;
   }
 
@@ -514,6 +657,42 @@ async function handleCompleted(call: any, message: any) {
     });
   }
 
+  // Short calls get short notes. A minute-long pill reminder or a birthday
+  // message doesn't warrant the full check-in card — sending one would train
+  // the family to stop reading the ones that matter. Anything urgent still
+  // travels, whichever kind of call surfaced it.
+  const kind = call.kind ?? "checkin";
+  const alarm = urgent.length
+    ? `\n\n⚠️ Needs your attention:\n${urgent.map((f) => `• ${flagText(f)}`).join("\n")}`
+    : "";
+
+  if (kind === "medication" || kind === "occasion") {
+    if (kind === "occasion" && call.occasion_id) {
+      await supabase.from("occasion_calls")
+        .update({ status: "completed" }).eq("id", call.occasion_id);
+    }
+    const note = kind === "medication"
+      ? `💊 Etta's reminder call with ${name} — ${
+        medsTaken === true
+          ? "they said they'd taken them."
+          : medsTaken === false
+          ? "they hadn't taken them yet."
+          : "they didn't say either way."
+      }${alarm}\n— Etta`
+      : `💌 Etta passed your message to ${name} today.\n\n${summaryText}${alarm}\n— Etta`;
+    // A2P 10DLC: a reminder call's note is the most recurring message this
+    // product sends, so it carries the standing opt-out like the rest.
+    const withOptOut = `${note}\nReply STOP to end texts.`;
+
+    const shortSent = await sendText(await familyPhones(call.senior_id), withOptOut);
+    if (shortSent && summaryRow) {
+      await supabase.from("call_summaries")
+        .update({ delivered_at: new Date().toISOString() })
+        .eq("id", summaryRow.id);
+    }
+    return;
+  }
+
   // The family note as a single text. The first character is the UI: a
   // colored signal readable from the lock screen without opening anything.
   // 🔴 is reserved for "needs attention" so it stays meaningful.
@@ -612,6 +791,14 @@ async function handleAssistantRequest(message: any): Promise<Response> {
           ask_about: "",
           attempt_number: "1",
           ask_recording: senior.share_recordings === "unknown" ? "yes" : "no",
+          // A senior ringing Etta back is having an ordinary check-in, not a
+          // reminder or a delivery.
+          call_kind: "checkin",
+          call_length_guidance: "as long as they'd like",
+          med_label: "",
+          occasion_kind: "",
+          occasion_from: "",
+          occasion_message: "",
         },
       },
     });
@@ -673,7 +860,12 @@ async function handleInbound(message: any) {
   if (senior.status === "active") {
     // A callback from an active senior: run the normal post-call processing
     // so anything they said (including "stop calling me") is honored.
-    if (callRow) await handleCompleted({ id: callRow.id, senior_id: senior.id }, message);
+    if (callRow) {
+      await handleCompleted(
+        { id: callRow.id, senior_id: senior.id, kind: "checkin" },
+        message,
+      );
+    }
     return;
   }
 
@@ -689,6 +881,9 @@ async function handleInbound(message: any) {
         message?.analysis?.summary ?? "Senior agreed on recorded inbound setup call.",
     });
     await supabase.from("seniors").update({ status: "active" }).eq("id", senior.id);
+    // If this was a second parent added later, their yes is what starts the
+    // billing for them — see activateParentAddon.
+    await activateParentAddon(senior.id, senior.family_id);
     const sched = (senior.schedules as { call_time: string; active: boolean }[] ?? [])
       .find((s) => s.active);
     const speech = sched ? timeSpeech(sched.call_time) : "the time you chose";
@@ -703,13 +898,21 @@ async function handleInbound(message: any) {
         `Reply STOP to opt out, HELP for help.`,
     );
   } else if (structured.consent_declined === true) {
-    await cancelSubscription(senior.family_id, "senior_declined_consent");
+    const stopped = await stopBillingForSenior(
+      senior.id,
+      senior.family_id,
+      "senior_declined_consent",
+    );
+    await supabase.from("call_schedules")
+      .update({ active: false }).eq("senior_id", senior.id);
     await sendText(
       await familyPhones(senior.id),
       `Etta update: ${name} decided not to start the check-in calls — and that's ` +
-        `completely okay; nothing will happen and you haven't been charged. ` +
-        `Your subscription is canceled. If they change their mind, just call ` +
-        `Etta together again from their phone. — Etta`,
+        `completely okay; nothing will happen and you haven't been charged for it. ` +
+        (stopped === "subscription"
+          ? `Your subscription is canceled. `
+          : `Nothing else about your account changes. `) +
+        `If they change their mind, just call Etta together again from their phone. — Etta`,
     );
   } else {
     await sendText(

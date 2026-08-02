@@ -299,6 +299,22 @@
               <span class="pick-body"><small>$19/month</small><b>Three days a week</b>
                 <em>Monday, Wednesday, Friday.</em></span>
             </label>
+            <label class="pick">
+              <input type="radio" name="plan" value="companion">
+              <span class="pick-body"><small>$69/month</small><b>Every day, unhurried</b>
+                <em>A longer call — ten to fifteen minutes — for someone who's often alone.</em></span>
+            </label>
+          </div>
+
+          <div class="plans-pick">
+            <span class="pick-q">Would you like a hand setting it up?</span>
+            <label class="pick">
+              <input type="checkbox" name="concierge" value="1">
+              <span class="pick-body"><small>$49 once</small><b>Concierge setup</b>
+                <em>A person from Etta calls you, walks you through it, and will stay on
+                  the line for your parent's yes. Added to your first month — so if your
+                  parent says no, it's never charged either.</em></span>
+            </label>
           </div>
 
           <label class="consent">
@@ -645,7 +661,7 @@
     });
   });
 
-  /* Plan cards light up with their radio. */
+  /* Plan cards light up with their control (radios and the concierge box). */
   var picks = Array.prototype.slice.call(form.querySelectorAll(".pick"));
   picks.forEach(function (pick) {
     pick.querySelector("input").addEventListener("change", function () {
@@ -690,6 +706,7 @@
         timezone: form.elements.timezone.value,
         call_time: form.elements.call_time.value,
         plan: (form.querySelector('input[name="plan"]:checked') || {}).value || "daily",
+        concierge: form.elements.concierge.checked,
         notes: form.elements.notes.value,
         sms_consent: true,
         sms_consent_text: CONSENT_TEXT,

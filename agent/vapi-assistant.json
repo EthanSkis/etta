@@ -39,6 +39,16 @@
     "model": "nova-3",
     "language": "en"
   },
+  "_variables": [
+    "Filled per call by place-due-calls (and by the assistant-request handler",
+    "in call-events for inbound calls): preferred_name, family_contact,",
+    "senior_notes, last_call_summary, ask_about, attempt_number, ask_recording,",
+    "call_kind, call_length_guidance, med_label, occasion_kind, occasion_from,",
+    "occasion_message. Non-check-in calls (medication reminders, occasion",
+    "calls, the evening check-in) also override firstMessage and",
+    "maxDurationSeconds per call — every one of those openings still says",
+    "'I'm an AI' in the first breath."
+  ],
   "_backgroundSound": "Vapi plays office/call-centre ambience by default when this is unset. On a warm personal check-in it reads as a telemarketing floor — the exact association Etta exists to avoid.",
   "backgroundSound": "off",
   "_maxDurationSeconds": [
@@ -48,7 +58,12 @@
     "the short call. 420s = 7 minutes. It is a backstop, not the plan — Etta is",
     "nudged to wind down at 5:00 and told to say goodbye at 6:00 (see the",
     "call-events function), so a call should end with a goodbye of its own well",
-    "before Vapi cuts the line."
+    "before Vapi cuts the line.",
+    "This value is the default. place-due-calls overrides it per call from the",
+    "plan and the kind of call — 900s on Companion, which is the tier that buys",
+    "a longer conversation, 150s for a medication reminder — and the wind-down",
+    "nudges are derived from whatever budget the call was given, so they always",
+    "land a minute or two before its own ceiling rather than at a fixed 5:00."
   ],
   "maxDurationSeconds": 420,
   "silenceTimeoutSeconds": 30,
