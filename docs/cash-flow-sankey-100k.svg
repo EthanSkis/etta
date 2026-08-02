@@ -15,8 +15,8 @@
   .note{fill:var(--muted);font-size:12.5px}
 </style>
 <rect width="1240" height="940" fill="var(--surface)"/>
-<text class="t" x="132" y="52">Where one subscriber's $39 goes each month</text>
-<text class="st" x="132" y="80">Daily plan · 4.5-minute calls · 2 SMS recipients · 80% answer rate</text>
+<text class="t" x="132" y="52">What it takes to retain $100k a month</text>
+<text class="st" x="132" y="80">6,374 Daily subscribers · $248,586/mo gross revenue · 4.5-minute calls · 2 SMS recipients · 80% answer rate</text>
 <text class="stm" x="132" y="102">Modelled from vendor list prices, Aug 2026 — scripts/unit-economics.mjs</text>
 
 <rect x="132" y="116" width="11" height="11" rx="2" fill="var(--keep)"/>
@@ -24,15 +24,15 @@
 <rect x="244" y="116" width="11" height="11" rx="2" fill="var(--spend)"/>
 <text class="key" x="262" y="126">money that leaves</text>
 
-<path d="M151,292.5 C321.68,292.5 321.68,210.00000000000003 492.36,210.00000000000003 L492.36,381.23948717948724 C321.68,381.23948717948724 321.68,463.7394871794872 151,463.7394871794872 Z" fill="var(--spend)" opacity=".34"/>
-<path d="M151,463.7394871794872 C321.68,463.7394871794872 321.68,471.23948717948724 492.36,471.23948717948724 L492.36,532.4712820512821 C321.68,532.4712820512821 321.68,524.9712820512821 151,524.9712820512821 Z" fill="var(--spend)" opacity=".34"/>
+<path d="M151,292.5 C321.68,292.5 321.68,210 492.36,210 L492.36,381.23948717948724 C321.68,381.23948717948724 321.68,463.73948717948724 151,463.73948717948724 Z" fill="var(--spend)" opacity=".34"/>
+<path d="M151,463.73948717948724 C321.68,463.73948717948724 321.68,471.23948717948724 492.36,471.23948717948724 L492.36,532.4712820512821 C321.68,532.4712820512821 321.68,524.9712820512821 151,524.9712820512821 Z" fill="var(--spend)" opacity=".34"/>
 <path d="M151,524.9712820512821 C321.68,524.9712820512821 321.68,562.4712820512821 492.36,562.4712820512821 L492.36,579.1179487179487 C321.68,579.1179487179487 321.68,541.6179487179487 151,541.6179487179487 Z" fill="var(--spend)" opacity=".34"/>
-<path d="M151,541.6179487179487 C321.68,541.6179487179487 321.68,624.1179487179486 492.36,624.1179487179486 L492.36,828.9999999999999 C321.68,828.9999999999999 321.68,746.5 151,746.5 Z" fill="var(--keep)" opacity=".34"/>
-<path d="M511.36,210.00000000000003 C682.04,210.00000000000003 682.04,150 852.72,150 L852.72,232.06923076923078 C682.04,232.06923076923078 682.04,292.0692307692308 511.36,292.0692307692308 Z" fill="var(--spend)" opacity=".34"/>
+<path d="M151,541.6179487179488 C321.68,541.6179487179488 321.68,624.1179487179486 492.36,624.1179487179486 L492.36,828.9999999999999 C321.68,828.9999999999999 321.68,746.5000000000001 151,746.5000000000001 Z" fill="var(--keep)" opacity=".34"/>
+<path d="M511.36,210 C682.04,210 682.04,150 852.72,150 L852.72,232.06923076923078 C682.04,232.06923076923078 682.04,292.0692307692308 511.36,292.0692307692308 Z" fill="var(--spend)" opacity=".34"/>
 <path d="M511.36,292.0692307692308 C682.04,292.0692307692308 682.04,262.0692307692308 852.72,262.0692307692308 L852.72,294.8969230769231 C682.04,294.8969230769231 682.04,324.8969230769231 511.36,324.8969230769231 Z" fill="var(--spend)" opacity=".34"/>
-<path d="M511.36,324.89692307692314 C682.04,324.89692307692314 682.04,324.8969230769231 852.72,324.8969230769231 L852.72,347.8297435897436 C682.04,347.8297435897436 682.04,347.82974358974366 511.36,347.82974358974366 Z" fill="var(--spend)" opacity=".34"/>
-<path d="M511.36,347.82974358974366 C682.04,347.82974358974366 682.04,377.8297435897436 852.72,377.8297435897436 L852.72,398.0851282051282 C682.04,398.0851282051282 682.04,368.0851282051283 511.36,368.0851282051283 Z" fill="var(--spend)" opacity=".34"/>
-<path d="M511.36,368.0851282051283 C682.04,368.0851282051283 682.04,428.0851282051282 852.72,428.0851282051282 L852.72,441.2394871794872 C682.04,441.2394871794872 682.04,381.23948717948724 511.36,381.23948717948724 Z" fill="var(--spend)" opacity=".34"/>
+<path d="M511.36,324.8969230769231 C682.04,324.8969230769231 682.04,324.8969230769231 852.72,324.8969230769231 L852.72,347.8297435897436 C682.04,347.8297435897436 682.04,347.8297435897436 511.36,347.8297435897436 Z" fill="var(--spend)" opacity=".34"/>
+<path d="M511.36,347.8297435897436 C682.04,347.8297435897436 682.04,377.8297435897436 852.72,377.8297435897436 L852.72,398.0851282051282 C682.04,398.0851282051282 682.04,368.0851282051282 511.36,368.0851282051282 Z" fill="var(--spend)" opacity=".34"/>
+<path d="M511.36,368.0851282051282 C682.04,368.0851282051282 682.04,428.0851282051282 852.72,428.0851282051282 L852.72,441.2394871794872 C682.04,441.2394871794872 682.04,381.2394871794872 511.36,381.2394871794872 Z" fill="var(--spend)" opacity=".34"/>
 <path d="M511.36,471.23948717948724 C682.04,471.23948717948724 682.04,471.2394871794872 852.72,471.2394871794872 L852.72,532.4712820512821 C682.04,532.4712820512821 682.04,532.4712820512821 511.36,532.4712820512821 Z" fill="var(--spend)" opacity=".34"/>
 <path d="M511.36,562.4712820512821 C682.04,562.4712820512821 682.04,562.4712820512821 852.72,562.4712820512821 L852.72,579.1179487179487 C682.04,579.1179487179487 682.04,579.1179487179487 511.36,579.1179487179487 Z" fill="var(--spend)" opacity=".34"/>
 <path d="M511.36,624.1179487179486 C682.04,624.1179487179486 682.04,609.1179487179487 852.72,609.1179487179487 L852.72,631.3523076923077 C682.04,631.3523076923077 682.04,646.3523076923076 511.36,646.3523076923076 Z" fill="var(--keep)" opacity=".34"/>
@@ -52,44 +52,44 @@
 <rect x="852.7" y="609.1" width="19" height="22.2" rx="2.5" fill="var(--keep)"/>
 <rect x="852.7" y="661.4" width="19" height="182.6" rx="2.5" fill="var(--keep)"/>
 <text class="nl" x="120" y="512.5" text-anchor="end">Revenue</text>
-<text class="nv" x="120" y="528.5" text-anchor="end">$39.00 <tspan class="np">(100.0%)</tspan></text>
+<text class="nv" x="120" y="528.5" text-anchor="end">$248,586 <tspan class="np">(100.0%)</tspan></text>
 <text class="ns" x="120" y="542.5" text-anchor="end">Daily plan</text>
 <text class="nl" x="523.36" y="299.6" text-anchor="start">Voice stack</text>
-<text class="nv" x="523.36" y="314.6" text-anchor="start">$14.71 <tspan class="np">(37.7%)</tspan></text>
+<text class="nv" x="523.36" y="314.6" text-anchor="start">$93,762 <tspan class="np">(37.7%)</tspan></text>
 <text class="nl" x="523.36" y="505.9" text-anchor="start">Family texts</text>
-<text class="nv" x="523.36" y="520.9" text-anchor="start">$5.26 <tspan class="np">(13.5%)</tspan></text>
+<text class="nv" x="523.36" y="520.9" text-anchor="start">$33,527 <tspan class="np">(13.5%)</tspan></text>
 <text class="nl" x="523.36" y="574.8" text-anchor="start">Payments</text>
-<text class="nv" x="523.36" y="589.8" text-anchor="start">$1.43 <tspan class="np">(3.7%)</tspan></text>
+<text class="nv" x="523.36" y="589.8" text-anchor="start">$9,115 <tspan class="np">(3.7%)</tspan></text>
 <text class="nl" x="523.36" y="730.6" text-anchor="start">Gross margin</text>
-<text class="nv" x="523.36" y="745.6" text-anchor="start">$17.60 <tspan class="np">(45.1%)</tspan></text>
+<text class="nv" x="523.36" y="745.6" text-anchor="start">$112,182 <tspan class="np">(45.1%)</tspan></text>
 <text class="nl" x="883.72" y="184.0" text-anchor="start">Vapi</text>
-<text class="nv" x="883.72" y="200.0" text-anchor="start">$7.05 <tspan class="np">(18.1%)</tspan></text>
+<text class="nv" x="883.72" y="200.0" text-anchor="start">$44,937 <tspan class="np">(18.1%)</tspan></text>
 <text class="ns" x="883.72" y="214.0" text-anchor="start">platform fee</text>
 <text class="nl" x="883.72" y="271.5" text-anchor="start">TTS</text>
-<text class="nv" x="883.72" y="287.5" text-anchor="start">$2.82 <tspan class="np">(7.2%)</tspan></text>
+<text class="nv" x="883.72" y="287.5" text-anchor="start">$17,975 <tspan class="np">(7.2%)</tspan></text>
 <text class="ns" x="883.72" y="301.5" text-anchor="start">Etta's voice</text>
 <text class="nl" x="883.72" y="329.4" text-anchor="start">Twilio</text>
-<text class="nv" x="883.72" y="345.4" text-anchor="start">$1.97 <tspan class="np">(5.1%)</tspan></text>
+<text class="nv" x="883.72" y="345.4" text-anchor="start">$12,557 <tspan class="np">(5.1%)</tspan></text>
 <text class="ns" x="883.72" y="359.4" text-anchor="start">the calls</text>
 <text class="nl" x="883.72" y="381.0" text-anchor="start">LLM</text>
-<text class="nv" x="883.72" y="397.0" text-anchor="start">$1.74 <tspan class="np">(4.5%)</tspan></text>
+<text class="nv" x="883.72" y="397.0" text-anchor="start">$11,091 <tspan class="np">(4.5%)</tspan></text>
 <text class="ns" x="883.72" y="411.0" text-anchor="start">Haiku, cached</text>
 <text class="nl" x="883.72" y="427.7" text-anchor="start">STT</text>
-<text class="nv" x="883.72" y="443.7" text-anchor="start">$1.13 <tspan class="np">(2.9%)</tspan></text>
+<text class="nv" x="883.72" y="443.7" text-anchor="start">$7,203 <tspan class="np">(2.9%)</tspan></text>
 <text class="ns" x="883.72" y="457.7" text-anchor="start">Deepgram</text>
 <text class="nl" x="883.72" y="494.9" text-anchor="start">SMS summaries</text>
-<text class="nv" x="883.72" y="510.9" text-anchor="start">$5.26 <tspan class="np">(13.5%)</tspan></text>
+<text class="nv" x="883.72" y="510.9" text-anchor="start">$33,527 <tspan class="np">(13.5%)</tspan></text>
 <text class="ns" x="883.72" y="524.9" text-anchor="start">×2 recipients</text>
 <text class="nl" x="883.72" y="563.8" text-anchor="start">Stripe</text>
-<text class="nv" x="883.72" y="579.8" text-anchor="start">$1.43 <tspan class="np">(3.7%)</tspan></text>
+<text class="nv" x="883.72" y="579.8" text-anchor="start">$9,115 <tspan class="np">(3.7%)</tspan></text>
 <text class="ns" x="883.72" y="593.8" text-anchor="start">2.9% + 30¢</text>
 <text class="nl" x="883.72" y="613.2" text-anchor="start">Trial repayment</text>
-<text class="nv" x="883.72" y="629.2" text-anchor="start">$1.91 <tspan class="np">(4.9%)</tspan></text>
+<text class="nv" x="883.72" y="629.2" text-anchor="start">$12,174 <tspan class="np">(4.9%)</tspan></text>
 <text class="ns" x="883.72" y="643.2" text-anchor="start">amortised, 12-mo tenure</text>
 <text class="nl" x="883.72" y="745.7" text-anchor="start">Retained</text>
-<text class="nv" x="883.72" y="761.7" text-anchor="start">$15.69 <tspan class="np">(40.2%)</tspan></text>
+<text class="nv" x="883.72" y="761.7" text-anchor="start">$100,008 <tspan class="np">(40.2%)</tspan></text>
 <text class="ns" x="883.72" y="775.7" text-anchor="start">free cash</text>
 
 <text class="note" x="132" y="900">Trial burn ($22.91 per paying customer, at 14 free days and 40% conversion) is spread over an assumed 12 months of tenure. Shorter tenure means a bigger slice — and more subscribers needed.</text>
-<text class="note" x="132" y="920">Gross margin is 45.1% of revenue; retained free cash after the trial is repaid is 40.2%.</text>
+<text class="note" x="132" y="920">Linear in subscribers: every figure here is the per-subscriber flow multiplied by 6,374. On Standard it would take 11,362 subscribers instead.</text>
 </svg>

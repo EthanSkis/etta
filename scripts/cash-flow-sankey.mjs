@@ -14,11 +14,23 @@
 
 import { writeFileSync } from "fs";
 
-const REVENUE = 39.0;
+// --retained=100000 scales every flow so the "Retained" leaf hits that figure,
+// turning the per-subscriber diagram into the whole book at that run-rate.
+const argv = Object.fromEntries(process.argv.slice(2).map((a) => {
+  const [k, ...r] = a.replace(/^--/, "").split("=");
+  return [k, r.length ? r.join("=") : true];
+}));
+
+const PER_SUB_REVENUE = 39.0;
+const PER_SUB_RETAINED = 15.69;   // gross margin less trial burn at 12-mo tenure
+const TARGET = argv.retained ? Number(argv.retained) : null;
+const SUBS = TARGET ? Math.ceil(TARGET / PER_SUB_RETAINED) : 1;
+const K = SUBS;                    // every per-subscriber figure scales linearly
+const REVENUE = PER_SUB_REVENUE * K;
 
 // [label, sublabel, value, parent]. Parent null = top level.
-const NODES = [
-  ["Revenue", "Daily plan", REVENUE, null],
+const NODES = ([
+  ["Revenue", "Daily plan", PER_SUB_REVENUE, null],
 
   ["Voice stack", null, 14.71, "Revenue"],
   ["Family texts", null, 5.26, "Revenue"],
@@ -34,7 +46,7 @@ const NODES = [
   ["Stripe", "2.9% + 30\u00a2", 1.43, "Payments"],
   ["Trial repayment", "amortised, 12-mo tenure", 1.91, "Gross margin"],
   ["Retained", "free cash", 15.69, "Gross margin"],
-];
+]).map(([l, sub, v, p]) => [l, sub, v * K, p]);
 
 // ---------------------------------------------------------------------------
 const W = 1240, H = 940;
@@ -80,7 +92,9 @@ const tint = (n) => (n.label === "Revenue" || n.label === "Gross margin" ||
   n.parent === "Gross margin") ? "keep" : "spend";
 
 const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const money = (v) => "$" + v.toFixed(2);
+const money = (v) => K > 1
+  ? "$" + Math.round(v).toLocaleString("en-US")
+  : "$" + v.toFixed(2);
 const pctOf = (v) => ((v / REVENUE) * 100).toFixed(1) + "%";
 
 // Ribbon: a horizontal band from the parent's right edge to the child's left,
@@ -137,8 +151,12 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" 
   .note{fill:var(--muted);font-size:12.5px}
 </style>
 <rect width="${W}" height="${H}" fill="var(--surface)"/>
-<text class="t" x="${M.left}" y="52">Where one subscriber's $39 goes each month</text>
-<text class="st" x="${M.left}" y="80">Daily plan · 4.5-minute calls · 2 SMS recipients · 80% answer rate</text>
+<text class="t" x="${M.left}" y="52">${TARGET
+  ? `What it takes to retain $${Math.round(TARGET / 1000)}k a month`
+  : "Where one subscriber's $39 goes each month"}</text>
+<text class="st" x="${M.left}" y="80">${TARGET
+  ? `${SUBS.toLocaleString("en-US")} Daily subscribers · $${Math.round(REVENUE).toLocaleString("en-US")}/mo gross revenue`
+  : "Daily plan"} · 4.5-minute calls · 2 SMS recipients · 80% answer rate</text>
 <text class="stm" x="${M.left}" y="102">Modelled from vendor list prices, Aug 2026 — scripts/unit-economics.mjs</text>
 
 <rect x="${M.left}" y="116" width="11" height="11" rx="2" fill="var(--keep)"/>
@@ -147,11 +165,16 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" 
 <text class="key" x="${M.left + 130}" y="126">money that leaves</text>
 
 ${links}${nodes}${labels}
-<text class="note" x="${M.left}" y="${H - 40}">Trial burn ($22.91 per paying customer, at 14 free days and 40% conversion) is spread over an assumed 12 months of tenure. Shorter tenure means a bigger slice.</text>
-<text class="note" x="${M.left}" y="${H - 20}">Gross margin is 45.1% of revenue; retained free cash after the trial is repaid is 40.2%.</text>
+<text class="note" x="${M.left}" y="${H - 40}">Trial burn ($22.91 per paying customer, at 14 free days and 40% conversion) is spread over an assumed 12 months of tenure. Shorter tenure means a bigger slice — and more subscribers needed.</text>
+<text class="note" x="${M.left}" y="${H - 20}">${TARGET
+  ? "Linear in subscribers: every figure here is the per-subscriber flow multiplied by " + SUBS.toLocaleString("en-US") + ". On Standard it would take 11,362 subscribers instead."
+  : "Gross margin is 45.1% of revenue; retained free cash after the trial is repaid is 40.2%."}</text>
 </svg>`;
 
-writeFileSync("/home/user/etta/docs/cash-flow-sankey.svg", svg);
+writeFileSync(TARGET
+  ? "/home/user/etta/docs/cash-flow-sankey-100k.svg"
+  : "/home/user/etta/docs/cash-flow-sankey.svg", svg);
 const leaves = [...byName.values()].filter((n) => !n.children.length);
-console.log("wrote docs/cash-flow-sankey.svg —",
-  "leaf total $" + leaves.reduce((s, n) => s + n.value, 0).toFixed(2), "vs revenue $" + REVENUE.toFixed(2));
+console.log("wrote", TARGET ? "docs/cash-flow-sankey-100k.svg" : "docs/cash-flow-sankey.svg", "—",
+  "leaf total", money(leaves.reduce((s, n) => s + n.value, 0)), "vs revenue", money(REVENUE),
+  "| retained", money(byName.get("Retained").value), "from", SUBS.toLocaleString("en-US"), "subscribers");
