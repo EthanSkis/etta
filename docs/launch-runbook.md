@@ -130,12 +130,56 @@ cron (every 10 min)
         creates a `calls` row, POSTs to Vapi ─▶ Vapi + Twilio dial the senior
                                                   │  Etta talks (agent/etta-system-prompt.md)
                                                   ▼
-      edge fn: call-events  ◀── Vapi end-of-call report (transcript + analysis)
+      edge fn: call-events  ◀── Vapi speech-update (each time Etta stops talking)
+                                  at 5:00 → "start closing" ─▶ back into the live call
+                                  at 6:00 → "say goodbye now"   (monitor.controlUrl)
+                            ◀── Vapi end-of-call report (transcript + analysis)
         stores outcome + call_summaries
         texts the family note (Twilio SMS, from Etta's own number)
         no answer → retry in 30 min (×3) → escalation text to contact chain
         "stop calling me" → consent revoked, schedules off, family told
 ```
+
+### The call's time budget
+
+A check-in is priced as a short call, so it has a hard ceiling:
+`maxDurationSeconds: 420` on the assistant. Seven minutes is the backstop, not
+the plan — Vapi cutting the line mid-sentence is the worst possible ending, so
+the server keeps a clock the model doesn't have and injects two system notes
+through `monitor.controlUrl`: wind down at 5:00, say goodbye at 6:00. Etta
+ends the call herself with the end-call tool; the cap should almost never fire.
+
+Three things this depends on, if you're changing it:
+
+- **`speech-update` must stay in the assistant's `serverMessages`.** It is the
+  only clock tick. Drop it and calls silently run to the 7-minute guillotine.
+- **`calls.control_url` is written once, at placement.** Vapi returns
+  `monitor.controlUrl` in the POST /call response and nowhere else.
+- **Run `20260802120000_call_time_budget.sql` before deploying either
+  function** — `place-due-calls` writes `control_url` and `call-events` writes
+  `wrapup_stage`, and against an old schema every placement fails.
+
+Patch the live assistant to match (both fields are top-level, so the
+replaces-nested-objects trap above doesn't apply):
+
+```
+curl -X PATCH https://api.vapi.ai/assistant/$VAPI_ASSISTANT_ID \
+  -H "Authorization: Bearer $VAPI_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"maxDurationSeconds":420,
+       "serverMessages":["end-of-call-report","status-update","speech-update"]}'
+```
+
+`agent/etta-system-prompt.md` changed too — it now tells Etta what the system
+notes are and how to act on them. Patch that separately, sending the **whole**
+`model` object (provider, model, temperature, messages, tools) per the warning
+above; a note she hasn't been told about reads like the senior said it.
+
+The same change fixes `calls.started_at`, which was never being set at connect
+time: `place-due-calls` flips the row to `in_progress` as soon as Vapi accepts
+the POST, so the status-update handler's `status === 'scheduled'` check never
+passed and the column stayed null until the end-of-call report backfilled it.
+The wrap-up clock measures from it, so it now fills on the first in-progress
+event instead.
 
 Supabase project: `kkqgxojxsfqgfpzdyzjv` (same one that holds the waitlist).
 All product tables are RLS-locked to the service role — nothing is reachable

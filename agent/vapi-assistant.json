@@ -41,7 +41,16 @@
   },
   "_backgroundSound": "Vapi plays office/call-centre ambience by default when this is unset. On a warm personal check-in it reads as a telemarketing floor — the exact association Etta exists to avoid.",
   "backgroundSound": "off",
-  "maxDurationSeconds": 600,
+  "_maxDurationSeconds": [
+    "The call's hard ceiling, and a unit-economics number rather than a",
+    "conversational one: a 10-minute check-in costs several times a 5-minute",
+    "one across Vapi, Twilio and the model, and $19/$39 plans are priced for",
+    "the short call. 420s = 7 minutes. It is a backstop, not the plan — Etta is",
+    "nudged to wind down at 5:00 and told to say goodbye at 6:00 (see the",
+    "call-events function), so a call should end with a goodbye of its own well",
+    "before Vapi cuts the line."
+  ],
+  "maxDurationSeconds": 420,
   "silenceTimeoutSeconds": 30,
   "backgroundDenoisingEnabled": true,
   "voicemailMessage": "Hi, it's Etta — sorry I missed you! Nothing to worry about; I'll try you again in a little while.",
@@ -49,7 +58,14 @@
     "url": "https://kkqgxojxsfqgfpzdyzjv.supabase.co/functions/v1/call-events",
     "secret": "SET_TO_SAME_VALUE_AS_VAPI_WEBHOOK_SECRET"
   },
-  "serverMessages": ["end-of-call-report", "status-update"],
+  "_serverMessages": [
+    "speech-update is the call's clock. Nothing else tells the assistant how",
+    "long it has been talking — the model has no sense of elapsed time — so",
+    "call-events uses the moment Etta stops speaking as a tick, and injects the",
+    "wind-down messages there. Sending them between her turns rather than on a",
+    "timer means a nudge never lands in the middle of the senior's sentence."
+  ],
+  "serverMessages": ["end-of-call-report", "status-update", "speech-update"],
   "artifactPlan": {
     "recordingEnabled": true
   },
