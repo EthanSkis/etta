@@ -478,3 +478,43 @@ three signatures.
 
 The consumer plans are how you prove retention and satisfaction. They are
 unlikely to be how you reach 60,000.
+
+### How long would it take?
+
+Growth is `S(t+1) = S(t) × (1 − churn) + gross adds`, so two things fall out
+before any judgement about demand.
+
+**The treadmill at the destination.** At 50% annual churn (5.6%/month), holding
+60,000 needs **3,368 gross adds every month, forever** — about $424k/month of
+acquisition at a $126 CAC. That is the run-rate cost of standing still, and it
+never ends.
+
+**The self-funding rate.** Each subscriber's $15.75 of retained cash buys
+0.125 new subscribers a month at $126 CAC, while churn removes 0.056. Reinvest
+everything and the business compounds at **6.9%/month — about 122%/year** with
+no outside capital:
+
+| Starting from | Years to 60,000, fully self-funded |
+|---|---|
+| 100 subscribers | 8.0 |
+| 500 subscribers | 6.0 |
+| 1,000 subscribers | 5.1 |
+| 2,500 subscribers | 4.0 |
+
+With outside capital the constraint is channel, not cash — sustaining 10–15%
+monthly growth in gross adds reaches 60,000 in **3.7–5.2 years and costs
+$11–13M of cumulative acquisition spend**.
+
+**The threshold that decides which world you are in.** Self-funding works only
+while `retained / CAC > monthly churn`. Solving it: **CAC = $281 is the line.**
+Below it the business compounds on its own; above it, acquisition costs more
+than a subscriber ever returns and growth stalls no matter how much is
+reinvested. At $126 there is real headroom; at $250 there is almost none. This
+single number decides whether Etta is a compounding business or a treadmill, and
+it has not been measured.
+
+Note what none of this is sensitive to: effort. Diligence dominates the first
+~1,000 subscribers — hand-selling ten families a week gets there in about two
+years, and that phase is what produces the conversion, churn and CAC numbers
+everything above is guessing at. Past that point the timeline is set by capital
+and channel economics, not by hours worked.
