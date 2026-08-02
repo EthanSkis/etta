@@ -41,7 +41,16 @@
   },
   "_backgroundSound": "Vapi plays office/call-centre ambience by default when this is unset. On a warm personal check-in it reads as a telemarketing floor — the exact association Etta exists to avoid.",
   "backgroundSound": "off",
-  "maxDurationSeconds": 600,
+  "_maxDurationSeconds": [
+    "Hard ceiling: Vapi drops the line here, mid-sentence if it has to, so the",
+    "system prompt aims to be closing by ~5 minutes and treats 7 as the edge.",
+    "This is a cost control as much as a product one — see docs/unit-economics.md.",
+    "At 10 minutes a Daily subscriber costs $39.78/month against $39 of revenue,",
+    "and there is no consumer price that fixes it (60% margin would need $104).",
+    "At 7 minutes the same subscriber runs ~24% margin. Don't raise this without",
+    "re-running scripts/unit-economics.mjs."
+  ],
+  "maxDurationSeconds": 420,
   "silenceTimeoutSeconds": 30,
   "backgroundDenoisingEnabled": true,
   "voicemailMessage": "Hi, it's Etta — sorry I missed you! Nothing to worry about; I'll try you again in a little while.",

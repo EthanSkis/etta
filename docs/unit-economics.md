@@ -307,6 +307,65 @@ from calls c join seniors s on s.id = c.senior_id join families f on f.id = s.fa
 where f.subscription_status in ('trialing', 'canceled', 'incomplete_expired');
 ```
 
+## Margin the senior never notices
+
+Everything above trades product for money — shorter calls, plainer texts, fewer
+recipients. This section is the other list: cost that buys nothing a user can
+see or hear. Where one subscriber-month goes on Daily at 4.5-minute calls:
+
+| Line | $/mo | % of revenue | % of COGS |
+|---|---|---|---|
+| Vapi platform fee | $7.05 | 18.1% | **33%** |
+| SMS (8 seg × 2) | $5.26 | 13.5% | 25% |
+| TTS | $2.82 | 7.2% | 13% |
+| Twilio voice | $1.97 | 5.1% | 9% |
+| LLM (cached) | $1.74 | 4.5% | 8% |
+| Stripe | $1.43 | 3.7% | 7% |
+| STT | $1.13 | 2.9% | 5% |
+
+**A third of COGS is Vapi's orchestration fee, and it is the one line that
+produces nothing the senior perceives.** TTS is the voice, STT is Etta hearing
+them, the LLM is what she says, Twilio is the call itself — every one of those
+is audible. The $0.05/min platform fee is glue. It is also, by 3×, the largest
+invisible lever: halving it is +$3.50/month, or nine points of margin, with a
+byte-identical call. Worth a volume-pricing conversation before it is worth an
+engineering project, but at scale the build-vs-buy maths flips.
+
+Ranked by dollars actually recoverable, all invisible:
+
+1. **Vapi platform fee — $7.05/mo at stake.** Volume pricing first. A
+   self-hosted orchestration layer eliminates it outright, at the cost of
+   owning the hardest part of the stack.
+2. **Confirm prompt caching is actually on — $2.20/mo.** Cached LLM is $1.74;
+   uncached is $3.94. Vapi should be caching the ~3,000-token system prefix on
+   every turn, but nothing in this repo verifies it. Once `cost_breakdown` has
+   real rows, compare the `llm` component against both figures — that settles
+   it without asking anyone.
+3. **Telephony — $1.97/mo at stake.** Telnyx is roughly $0.007/min against
+   Twilio's $0.014 for the same audio. Twilio also discounts at volume. Note
+   the number is imported into Vapi, so this is a migration, not a config flag.
+4. **Pin the analysis model — ~$0.60/mo.** `analysisPlan.summaryPlan` and
+   `structuredDataPlan` don't specify a model, so both run on Vapi's default
+   (GPT-4o-class) rather than the Haiku the conversation uses. They also make
+   two separate passes over the same transcript; folding the summary into the
+   structured-data schema makes it one. The family sees the identical text.
+5. **`silenceTimeoutSeconds` 30 → 15 — ~$0.23/mo.** Only fires on a line
+   answered into silence; a senior who is actually talking never reaches it.
+   One real no-answer already billed 43 seconds this way.
+6. **Don't record calls for seniors who declined sharing.** `recordingEnabled`
+   is unconditional, but `share_recordings = 'no'` means nobody will ever be
+   allowed to listen. Storage with no possible consumer. (Keep recording the
+   inbound consent calls — those are the legal artifact.)
+7. **Normalise phones to E.164 before de-duplicating SMS recipients.**
+   `familyPhones()` de-dupes with `includes()`, so the same person stored as
+   `+15551234567` on the family and `15551234567` as a member gets two copies
+   of every summary, and you pay for both.
+8. **Annual billing — $3.30/yr.** Stripe's $0.30 fixed fee once instead of
+   twelve times. This one is user-visible, but only as an added option.
+
+Adding these up: roughly $4–11/month per Daily subscriber, or +10 to +28 points
+of margin, without changing a single thing the senior hears or the family reads.
+
 ## Recommendation
 
 **Don't change the prices.** $19 and $39 sit correctly in the market band the
