@@ -258,7 +258,15 @@ Deno.serve(async (req) => {
     }
     const vapiCall = await res.json();
     await supabase.from("calls")
-      .update({ status: "in_progress", provider_call_id: vapiCall.id })
+      .update({
+        status: "in_progress",
+        provider_call_id: vapiCall.id,
+        // Vapi hands out the live-control endpoint exactly once, here. It is
+        // how call-events tells Etta to start wrapping up at the 5-minute
+        // mark; without it the only thing keeping calls short is the hard
+        // 7-minute cut, which lands mid-sentence.
+        control_url: vapiCall.monitor?.controlUrl ?? null,
+      })
       .eq("id", call.id);
     report.placed++;
   }
