@@ -63,6 +63,10 @@ jobs:
       - name: Deploy functions
         run: supabase functions deploy --project-ref "$PROJECT_REF"
 
+      # Informational only. It must never be the thing that fails a run —
+      # without the token it fails too, which turns one clear problem into
+      # two red steps and buries the message that actually says what to do.
       - name: What's live now
         if: always()
+        continue-on-error: true
         run: supabase functions list --project-ref "$PROJECT_REF"
