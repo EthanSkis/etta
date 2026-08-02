@@ -11,6 +11,7 @@ consent, always. Full concept: [`business-description.md`](business-description.
 | `index.html`, `signup.html`, `how-it-works.html`, `pledge.html`, `pricing.html`, `faq.html`, `styles.css`, `app.js` | The site, with live self-serve signup (no waitlist): family fills the form, then the senior calls Etta from their own phone to give their recorded yes |
 | `favicon.ico`, `assets/`, `site.webmanifest` | Site icons — the lowercase `e` wordmark with its terracotta period, in the paper/ink/terracotta palette |
 | `brand/etta-instagram-profile.png` | Instagram profile picture (1024×1024, `etta.` wordmark, centred for the circular crop) |
+| `brand/etta-background-9x16*.png` | Blank 9:16 story backgrounds (1080×1920) in the same paper-and-glow style — no text, for putting copy on top |
 | `supabase/migrations/` | Product database schema: families, seniors, append-only consent log, schedules, calls, summaries, escalations |
 | `supabase/functions/place-due-calls/` | Scheduler (cron, every 10 min): timezone-aware "whose check-in time is it?", consent check, places calls via Vapi |
 | `supabase/functions/call-events/` | Vapi webhook: call outcomes, family summary texts (SMS from Etta's own number — no app, no inbox), no-answer retries + escalation, inbound consent calls, immediate in-call revocation, and the call's time budget (wind-down notes injected mid-call, timed to whatever ceiling that call was placed with) |
