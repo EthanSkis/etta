@@ -11,22 +11,14 @@
 // validation, tight length caps, and a duplicate-number check.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { ONE_TIME, PLANS, priceId, resolvePlanPrice } from "../_shared/catalog.ts";
+import { ensureOneTimePrice, stripe } from "../_shared/stripe.ts";
+import { ALLOWED_TIMEZONES, cleanName, normalizePhone, validCallTime } from "../_shared/validate.ts";
 
 const ETTA_NUMBER_DISPLAY = "(762) 239-4275";
 const ETTA_NUMBER_E164 = "+17622394275";
 const SITE = "https://www.ettacalls.com";
 const TRIAL_DAYS = 14;
-
-const PLANS: Record<string, { price: string; days: number[] }> = {
-  // Standard: three calls a week (Mon/Wed/Fri). Daily: every day.
-  standard: { price: "price_1TzO26A8l4yd6OUzIGnqRkhB", days: [1, 3, 5] },
-  daily: { price: "price_1TzO27A8l4yd6OUzhi1l2T3b", days: [0, 1, 2, 3, 4, 5, 6] },
-};
-
-const ALLOWED_TIMEZONES = new Set([
-  "America/New_York", "America/Chicago", "America/Denver", "America/Phoenix",
-  "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu",
-]);
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -44,67 +36,6 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json", ...CORS },
   });
-}
-
-// "(208) 315-1420" / "208.315.1420" / "+1 208 315 1420" → "+12083151420"
-function normalizePhone(raw: string): string | null {
-  const digits = (raw ?? "").replace(/\D/g, "");
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  return null;
-}
-
-function cleanName(raw: unknown): string | null {
-  const s = String(raw ?? "").trim().replace(/\s+/g, " ");
-  if (!s || s.length > 80) return null;
-  return s;
-}
-
-// A misconfigured key is the likeliest billing outage, and the failure is
-// otherwise inscrutable: a key copied from Stripe's dashboard while still
-// masked contains a "…" (U+2026), and fetch rejects it as a non-ByteString
-// header long before Stripe ever sees it. Check the shape and say so plainly.
-function stripeKey(): string {
-  // Dashboard pastes routinely carry trailing newlines; a header value with
-  // one is rejected outright, so normalize before anything else touches it.
-  return (Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim();
-}
-
-function stripeKeyProblem(): string | null {
-  const key = stripeKey();
-  if (!key) return "STRIPE_SECRET_KEY is not set";
-  if (/[^\x20-\x7E]/.test(key)) {
-    return key.includes("…") || key.includes("...")
-      ? "STRIPE_SECRET_KEY looks like the masked key from the Stripe dashboard " +
-        "(it contains an ellipsis) — reveal the key and paste it in full"
-      : "STRIPE_SECRET_KEY contains a non-ASCII character (bad copy/paste)";
-  }
-  if (!/^(sk|rk)_(live|test)_[A-Za-z0-9]{20,}$/.test(key)) {
-    return "STRIPE_SECRET_KEY is not shaped like a Stripe secret key";
-  }
-  return null;
-}
-
-async function stripe(path: string, form: Record<string, string>): Promise<Record<string, unknown>> {
-  const problem = stripeKeyProblem();
-  if (problem) {
-    console.error("stripe config error:", problem);
-    throw new Error(problem);
-  }
-  const res = await fetch(`https://api.stripe.com/v1/${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${stripeKey()}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams(form),
-  });
-  const body = await res.json();
-  if (!res.ok) {
-    console.error("stripe error:", path, res.status, JSON.stringify(body).slice(0, 300));
-    throw new Error(body?.error?.message ?? "payment setup failed");
-  }
-  return body;
 }
 
 Deno.serve(async (req) => {
@@ -129,7 +60,9 @@ Deno.serve(async (req) => {
   const callTime = String(body.call_time ?? "");
   const planKey = String(body.plan ?? "daily");
   const notes = String(body.notes ?? "").trim().slice(0, 1000) || null;
-  const plan = PLANS[planKey];
+  const plan = PLANS[planKey as keyof typeof PLANS];
+  // Optional at signup: a person from Etta walks the family through setup.
+  const wantsConcierge = body.concierge === true;
   // A2P 10DLC / TCPA: the summaries are delivered by text, so the account
   // holder's consent to be texted is captured at signup and kept verbatim.
   const smsConsent = body.sms_consent === true;
@@ -145,7 +78,7 @@ Deno.serve(async (req) => {
     }, 400);
   }
   if (!ALLOWED_TIMEZONES.has(timezone)) return json({ error: "Please pick a time zone." }, 400);
-  if (!/^(0[6-9]|1[0-9]|20):(00|30)$/.test(callTime)) {
+  if (!validCallTime(callTime)) {
     return json({ error: "Please pick a call time." }, 400);
   }
   if (!plan) return json({ error: "Please pick a plan." }, 400);
@@ -223,14 +156,31 @@ Deno.serve(async (req) => {
     await supabase.from("families")
       .update({ stripe_customer_id: customer.id as string }).eq("id", family.id);
 
+    // Concierge setup is a one-time line on the same checkout. With a trial
+    // running it lands on the first real invoice — which means it is only
+    // ever charged after the senior has said yes, like everything else.
+    const conciergeLine: Record<string, string> = wantsConcierge
+      ? {
+        "line_items[1][price]": priceId(ONE_TIME.concierge_setup.priceEnv) ||
+          await ensureOneTimePrice(
+            "etta_concierge_setup",
+            "Etta — concierge setup",
+            ONE_TIME.concierge_setup.cents,
+          ),
+        "line_items[1][quantity]": "1",
+      }
+      : {};
+
     const session = await stripe("checkout/sessions", {
       mode: "subscription",
       customer: customer.id as string,
-      "line_items[0][price]": plan.price,
+      "line_items[0][price]": await resolvePlanPrice(plan),
       "line_items[0][quantity]": "1",
+      ...conciergeLine,
       "subscription_data[trial_period_days]": String(TRIAL_DAYS),
       "subscription_data[metadata][family_id]": family.id,
       "metadata[family_id]": family.id,
+      ...(wantsConcierge ? { "metadata[purpose]": "concierge_setup" } : {}),
       allow_promotion_codes: "true",
       success_url: `${SITE}/signup?started=1&who=${encodeURIComponent(parentName)}`,
       cancel_url: `${SITE}/signup?canceled=1`,

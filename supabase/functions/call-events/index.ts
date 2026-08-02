@@ -15,10 +15,15 @@
 // header; must match VAPI_WEBHOOK_SECRET.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { ADDONS, resolveAddonPrice } from "../_shared/catalog.ts";
+import { addSubscriptionItem, removeSubscriptionItem, stripe } from "../_shared/stripe.ts";
+import { sendText } from "../_shared/sms.ts";
 
 const MAX_ATTEMPTS = 3;        // 1 scheduled call + 2 retries
+// A pill reminder that goes unanswered gets one more try and then lets it be:
+// the day's check-in call is the escalation path, not this.
+const MED_MAX_ATTEMPTS = 2;
 const RETRY_DELAY_MINUTES = 30;
-const DEFAULT_FROM_NUMBER = "+17622394275"; // "Etta outbound" — same number Etta calls from
 
 // The family page is served from our own domain, not the Supabase function
 // URL: Supabase rewrites text/html to text/plain on *.supabase.co, so the
@@ -79,34 +84,6 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json" },
   });
-}
-
-// Sends one SMS per recipient. True only if every send succeeded.
-async function sendText(to: string[], body: string): Promise<boolean> {
-  const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
-  const token = Deno.env.get("TWILIO_AUTH_TOKEN");
-  const from = Deno.env.get("TWILIO_FROM_NUMBER") ?? DEFAULT_FROM_NUMBER;
-  if (!sid || !token || to.length === 0) return false;
-
-  let allOk = true;
-  for (const number of to) {
-    const res = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: "Basic " + btoa(`${sid}:${token}`),
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({ From: from, To: number, Body: body }),
-      },
-    );
-    if (!res.ok) {
-      console.error("twilio sms failed:", number, res.status, await res.text());
-      allOk = false;
-    }
-  }
-  return allOk;
 }
 
 // deno-lint-ignore no-explicit-any
@@ -179,6 +156,91 @@ async function cancelSubscription(familyId: string, reason: string) {
     type: "etta.subscription_canceled",
     detail: { reason, subscription: subId },
   });
+}
+
+/**
+ * A second parent said yes — so now, and not a moment before, they become a
+ * line on the family's bill.
+ *
+ * The add-on was created 'pending_consent' when the family added them (see
+ * the addons function). This is the other half of the promise the first
+ * parent already got: no charge for calls nobody has agreed to receive.
+ *
+ * A billing failure here must never stop the calls. The senior consented;
+ * that stands. The add-on simply stays pending and unbilled, which errs
+ * against us rather than against them.
+ */
+async function activateParentAddon(seniorId: string, familyId: string) {
+  const { data: addon } = await supabase.from("subscription_addons")
+    .select("id").eq("senior_id", seniorId)
+    .eq("addon_key", "second_parent").eq("status", "pending_consent").maybeSingle();
+  if (!addon) return;
+
+  const { data: family } = await supabase.from("families")
+    .select("stripe_subscription_id, subscription_status").eq("id", familyId).maybeSingle();
+
+  const patch: Record<string, unknown> = {
+    status: "active",
+    activated_at: new Date().toISOString(),
+  };
+
+  if (family?.subscription_status !== "comped" && family?.stripe_subscription_id) {
+    try {
+      const def = ADDONS.second_parent;
+      const price = await resolveAddonPrice(def);
+      const item = await addSubscriptionItem(family.stripe_subscription_id, price, 1);
+      patch.stripe_item_id = item.id;
+      patch.stripe_price_id = price;
+      patch.unit_amount_cents = def.monthlyCents;
+    } catch (err) {
+      console.error("second parent billing failed (calls continue):", seniorId, err);
+      return;
+    }
+  }
+
+  await supabase.from("subscription_addons").update(patch).eq("id", addon.id);
+  await supabase.from("billing_events").insert({
+    family_id: familyId,
+    type: "etta.addon_activated",
+    detail: { addon: "second_parent", senior_id: seniorId },
+  });
+}
+
+/**
+ * Stop billing for ONE senior when they decline or revoke.
+ *
+ * With more than one parent on an account, "they said stop" must not cancel
+ * the whole subscription — the other parent's calls have nothing to do with
+ * it. So: a senior who arrived as an add-on takes only their own add-on with
+ * them; the senior the account was opened for takes the subscription.
+ *
+ * Returns which of the two happened, because the family's text has to say
+ * the true thing about their bill.
+ */
+async function stopBillingForSenior(
+  seniorId: string,
+  familyId: string,
+  reason: string,
+): Promise<"addon" | "subscription"> {
+  const { data: addon } = await supabase.from("subscription_addons")
+    .select("id, stripe_item_id").eq("senior_id", seniorId)
+    .eq("addon_key", "second_parent").neq("status", "canceled").maybeSingle();
+
+  if (!addon) {
+    await cancelSubscription(familyId, reason);
+    return "subscription";
+  }
+
+  if (addon.stripe_item_id) await removeSubscriptionItem(addon.stripe_item_id as string);
+  await supabase.from("subscription_addons")
+    .update({ status: "canceled", canceled_at: new Date().toISOString() })
+    .eq("id", addon.id);
+  await supabase.from("billing_events").insert({
+    family_id: familyId,
+    type: "etta.addon_removed",
+    detail: { addon: "second_parent", senior_id: seniorId, reason },
+  });
+  return "addon";
 }
 
 // "09:00:00" → "9 in the morning", "12:30:00" → "12:30 in the afternoon"
@@ -266,12 +328,16 @@ async function handleRevocation(call: any, structured: any) {
     .select("first_name, preferred_name, family_id")
     .eq("id", call.senior_id).maybeSingle();
   const name = senior?.preferred_name || senior?.first_name || "your parent";
-  if (senior?.family_id) await cancelSubscription(senior.family_id, "senior_revoked_consent");
+  const stopped = senior?.family_id
+    ? await stopBillingForSenior(call.senior_id, senior.family_id, "senior_revoked_consent")
+    : "subscription";
   const sent = await sendText(
     await familyPhones(call.senior_id),
     `Etta update: on today's call, ${name} asked Etta to stop calling — and Etta ` +
-      `honored that right away, as promised. No more calls will be placed, and ` +
-      `your subscription is canceled so you won't be billed again. ` +
+      `honored that right away, as promised. No more calls will be placed to ${name}, ` +
+      (stopped === "subscription"
+        ? `and your subscription is canceled so you won't be billed again. `
+        : `and their part of the bill ends today — the rest of your account carries on. `) +
       `It might be a passing mood or a real preference; a gentle conversation is ` +
       `usually the best next step. If ${name} wants the calls again, it just takes ` +
       `a fresh yes from them. — Etta`,
@@ -285,7 +351,10 @@ async function handleRevocation(call: any, structured: any) {
 
 // deno-lint-ignore no-explicit-any
 async function handleNoAnswer(call: any) {
-  if (call.attempt_number < MAX_ATTEMPTS) {
+  const kind = call.kind ?? "checkin";
+  const maxAttempts = kind === "medication" ? MED_MAX_ATTEMPTS : MAX_ATTEMPTS;
+
+  if (call.attempt_number < maxAttempts) {
     const retryAt = new Date(Date.now() + RETRY_DELAY_MINUTES * 60_000);
     const { error } = await supabase.from("calls").insert({
       senior_id: call.senior_id,
@@ -293,10 +362,47 @@ async function handleNoAnswer(call: any) {
       scheduled_for: retryAt.toISOString(),
       scheduled_local_date: call.scheduled_local_date,
       attempt_number: call.attempt_number + 1,
+      // A retry is the same call, so it keeps its kind and its errand.
+      kind,
+      occasion_id: call.occasion_id ?? null,
     });
     if (error && !error.message.includes("duplicate")) {
       console.error("retry insert failed:", error.message);
     }
+    return;
+  }
+
+  // A missed pill reminder isn't news on its own — the check-in call is what
+  // tells the family whether anything is actually wrong.
+  if (kind === "medication") return;
+
+  // A message the family paid to have delivered, undelivered: tell them
+  // plainly, and don't dress it up as an alarm about their parent.
+  if (kind === "occasion" && call.occasion_id) {
+    const { data: occ } = await supabase.from("occasion_calls")
+      .select("stripe_payment_intent").eq("id", call.occasion_id).maybeSingle();
+    // Undelivered means unpaid for: refund it without being asked.
+    let refunded = false;
+    if (occ?.stripe_payment_intent) {
+      try {
+        await stripe("refunds", { payment_intent: occ.stripe_payment_intent });
+        refunded = true;
+      } catch (err) {
+        console.error("occasion refund failed:", err);
+      }
+    }
+    await supabase.from("occasion_calls")
+      .update({ status: "no_answer" }).eq("id", call.occasion_id);
+    const { data: s } = await supabase.from("seniors")
+      .select("first_name, preferred_name").eq("id", call.senior_id).maybeSingle();
+    const who = s?.preferred_name || s?.first_name || "your parent";
+    await sendText(
+      await familyPhones(call.senior_id),
+      `Etta here — I tried ${who} a few times today and couldn't get through, so ` +
+        `your message wasn't delivered.${
+          refunded ? " I've refunded it." : ""
+        } Reply to this number if you'd like me to try again another day. — Etta`,
+    );
     return;
   }
 
@@ -424,6 +530,39 @@ async function handleCompleted(call: any, message: any) {
     });
   }
 
+  // Short calls get short notes. A minute-long pill reminder or a birthday
+  // message doesn't warrant the full check-in card — sending one would train
+  // the family to stop reading the ones that matter. Anything urgent still
+  // travels, whichever kind of call surfaced it.
+  const kind = call.kind ?? "checkin";
+  const alarm = urgent.length
+    ? `\n\n⚠️ Needs your attention:\n${urgent.map((f) => `• ${flagText(f)}`).join("\n")}`
+    : "";
+
+  if (kind === "medication" || kind === "occasion") {
+    if (kind === "occasion" && call.occasion_id) {
+      await supabase.from("occasion_calls")
+        .update({ status: "completed" }).eq("id", call.occasion_id);
+    }
+    const note = kind === "medication"
+      ? `💊 Etta's reminder call with ${name} — ${
+        medsTaken === true
+          ? "they said they'd taken them."
+          : medsTaken === false
+          ? "they hadn't taken them yet."
+          : "they didn't say either way."
+      }${alarm}\n— Etta`
+      : `💌 Etta passed your message to ${name} today.\n\n${summaryText}${alarm}\n— Etta`;
+
+    const shortSent = await sendText(await familyPhones(call.senior_id), note);
+    if (shortSent && summaryRow) {
+      await supabase.from("call_summaries")
+        .update({ delivered_at: new Date().toISOString() })
+        .eq("id", summaryRow.id);
+    }
+    return;
+  }
+
   // The family note as a single text. The first character is the UI: a
   // colored signal readable from the lock screen without opening anything.
   // 🔴 is reserved for "needs attention" so it stays meaningful.
@@ -522,6 +661,14 @@ async function handleAssistantRequest(message: any): Promise<Response> {
           ask_about: "",
           attempt_number: "1",
           ask_recording: senior.share_recordings === "unknown" ? "yes" : "no",
+          // A senior ringing Etta back is having an ordinary check-in, not a
+          // reminder or a delivery.
+          call_kind: "checkin",
+          call_length_guidance: "as long as they'd like",
+          med_label: "",
+          occasion_kind: "",
+          occasion_from: "",
+          occasion_message: "",
         },
       },
     });
@@ -583,7 +730,12 @@ async function handleInbound(message: any) {
   if (senior.status === "active") {
     // A callback from an active senior: run the normal post-call processing
     // so anything they said (including "stop calling me") is honored.
-    if (callRow) await handleCompleted({ id: callRow.id, senior_id: senior.id }, message);
+    if (callRow) {
+      await handleCompleted(
+        { id: callRow.id, senior_id: senior.id, kind: "checkin" },
+        message,
+      );
+    }
     return;
   }
 
@@ -599,6 +751,9 @@ async function handleInbound(message: any) {
         message?.analysis?.summary ?? "Senior agreed on recorded inbound setup call.",
     });
     await supabase.from("seniors").update({ status: "active" }).eq("id", senior.id);
+    // If this was a second parent added later, their yes is what starts the
+    // billing for them — see activateParentAddon.
+    await activateParentAddon(senior.id, senior.family_id);
     const sched = (senior.schedules as { call_time: string; active: boolean }[] ?? [])
       .find((s) => s.active);
     const speech = sched ? timeSpeech(sched.call_time) : "the time you chose";
@@ -613,13 +768,21 @@ async function handleInbound(message: any) {
         `Reply STOP to opt out, HELP for help.`,
     );
   } else if (structured.consent_declined === true) {
-    await cancelSubscription(senior.family_id, "senior_declined_consent");
+    const stopped = await stopBillingForSenior(
+      senior.id,
+      senior.family_id,
+      "senior_declined_consent",
+    );
+    await supabase.from("call_schedules")
+      .update({ active: false }).eq("senior_id", senior.id);
     await sendText(
       await familyPhones(senior.id),
       `Etta update: ${name} decided not to start the check-in calls — and that's ` +
-        `completely okay; nothing will happen and you haven't been charged. ` +
-        `Your subscription is canceled. If they change their mind, just call ` +
-        `Etta together again from their phone. — Etta`,
+        `completely okay; nothing will happen and you haven't been charged for it. ` +
+        (stopped === "subscription"
+          ? `Your subscription is canceled. `
+          : `Nothing else about your account changes. `) +
+        `If they change their mind, just call Etta together again from their phone. — Etta`,
     );
   } else {
     await sendText(

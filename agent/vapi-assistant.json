@@ -39,8 +39,19 @@
     "model": "nova-3",
     "language": "en"
   },
+  "_variables": [
+    "Filled per call by place-due-calls (and by the assistant-request handler",
+    "in call-events for inbound calls): preferred_name, family_contact,",
+    "senior_notes, last_call_summary, ask_about, attempt_number, ask_recording,",
+    "call_kind, call_length_guidance, med_label, occasion_kind, occasion_from,",
+    "occasion_message. Non-check-in calls (medication reminders, occasion",
+    "calls, the evening check-in) also override firstMessage and",
+    "maxDurationSeconds per call — every one of those openings still says",
+    "'I'm an AI' in the first breath."
+  ],
   "_backgroundSound": "Vapi plays office/call-centre ambience by default when this is unset. On a warm personal check-in it reads as a telemarketing floor — the exact association Etta exists to avoid.",
   "backgroundSound": "off",
+  "_maxDurationSeconds": "The default ceiling for a check-in. Overridden per call: 150s for a medication reminder, 420s for an occasion call, 1080s on the Companion plan.",
   "maxDurationSeconds": 600,
   "silenceTimeoutSeconds": 30,
   "backgroundDenoisingEnabled": true,

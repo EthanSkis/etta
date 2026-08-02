@@ -12,6 +12,12 @@
 // The token is a per-senior capability: long, random, rotatable. Everything
 // is server-rendered from the database, so the product tables stay
 // service-role only and this function is the single, narrow public window.
+//
+// A day can now hold more than one call — an evening check-in, a medication
+// reminder, a birthday message. The day's card is still the check-in, because
+// that is what the family is actually asking about when they open this page;
+// everything else that happened is listed beneath it rather than competing
+// with it.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -257,6 +263,13 @@ details .panel{margin:0 0 14px;box-shadow:none}
 .pip.miss{background:none;border:1.5px dashed var(--terra)}
 .when-word{color:var(--ink-soft);font-size:13.5px}
 
+.also{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.also .lab{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-soft);margin-bottom:7px;font-weight:700}
+.also-item{display:flex;gap:9px;align-items:flex-start;font-size:14px;line-height:1.5;
+  color:var(--ink-soft);padding:5px 0}
+.also-item b{color:var(--ink);font-weight:600}
+.dl{font-size:12px;color:var(--ink-soft);text-decoration:underline;white-space:nowrap}
 .manage{display:inline-flex;align-items:center;gap:7px;margin-top:24px;
   font-size:14px;color:var(--ink);text-decoration:none;
   border:1px solid var(--line-firm);border-radius:3px;padding:10px 16px;background:var(--card)}
@@ -423,6 +436,11 @@ function speakTime(t: string): string {
   return `${h}:${ms} ${h24 < 12 ? "AM" : "PM"}`;
 }
 
+// PostgREST inlines joined rows; the generated types don't describe them, so
+// query results are read as plain rows.
+// deno-lint-ignore no-explicit-any
+type Row = any;
+
 interface Stats {
   answered: number;
   attempted: number;
@@ -437,11 +455,26 @@ Deno.serve(async (req) => {
   const token = new URL(req.url).pathname.split("/").filter(Boolean).pop() ?? "";
   if (!/^[a-f0-9]{24}$/.test(token)) return notFound();
 
-  const { data: senior } = await supabase.from("seniors")
-    .select("id, first_name, preferred_name, status, timezone, phone, " +
-      "schedules:call_schedules(call_time, days_of_week, active)")
+  const { data: seniorRow } = await supabase.from("seniors")
+    .select("id, family_id, first_name, preferred_name, status, timezone, phone, " +
+      "schedules:call_schedules(call_time, days_of_week, active, kind)")
     .eq("share_token", token).maybeSingle();
-  if (!senior) return notFound();
+  if (!seniorRow) return notFound();
+  const senior = seniorRow as Row;
+
+  // What this family has bought changes what the page can offer them.
+  const { data: addonRows } = await supabase.from("subscription_addons")
+    .select("addon_key").eq("family_id", senior.family_id).eq("status", "active");
+  const addons = new Set((addonRows ?? []).map((a) => a.addon_key as string));
+  const hasReport = addons.has("care_report");
+  const hasArchive = addons.has("recording_archive");
+
+  // Both parents, when there are two: one link each, and a way between them.
+  const { data: alsoOnAccount } = await supabase.from("seniors")
+    .select("first_name, preferred_name, share_token")
+    .eq("family_id", senior.family_id)
+    .neq("id", senior.id)
+    .in("status", ["active", "pending_consent", "paused"]);
 
   const name = senior.preferred_name || senior.first_name;
   const tz = senior.timezone as string;
@@ -450,6 +483,7 @@ Deno.serve(async (req) => {
   const { data: calls } = await supabase.from("calls")
     .select(
       "id, status, scheduled_local_date, attempt_number, duration_seconds, recording_shared, " +
+        "kind, recording_purged_at, " +
         "summary:call_summaries(summary, mood_score, ate_today, slept_well, meds_taken, " +
         "flags, tomorrow_topic)",
     )
@@ -460,11 +494,21 @@ Deno.serve(async (req) => {
     .in("status", ["completed", "no_answer", "scheduled", "in_progress"])
     .gte("scheduled_local_date", since)
     .order("scheduled_local_date", { ascending: false })
-    .order("attempt_number", { ascending: false });
+    // Newest first within the day: with a morning and an evening check-in,
+    // the evening one is the news.
+    .order("created_at", { ascending: false });
 
+  // Anything that isn't the day's check-in: a pill reminder, a birthday
+  // message. Listed under the day, never instead of it.
+  interface Extra {
+    kind: string;
+    minutes: number;
+    summary: string | null;
+  }
   interface Day {
     id: string | null;
     recordingShared: boolean;
+    recordingPurged: boolean;
     date: string;
     completed: boolean;
     missed: boolean;
@@ -479,27 +523,34 @@ Deno.serve(async (req) => {
     flags: Flag[];
     summary: string | null;
     tomorrow: string | null;
+    extras: Extra[];
   }
   const byDate = new Map<string, Day>();
-  for (const c of calls ?? []) {
+  for (const c of (calls ?? []) as Row[]) {
     const date = c.scheduled_local_date as string;
     const cur = byDate.get(date) ?? {
-      id: null, recordingShared: false,
+      id: null, recordingShared: false, recordingPurged: false,
       date, completed: false, missed: false, pending: false,
       minutes: 0, seconds: 0, mood: null,
       urgent: false, slept: null, ate: null, meds: null, flags: [], summary: null,
-      tomorrow: null,
+      tomorrow: null, extras: [] as Extra[],
     };
-    if (c.status === "completed" && !cur.completed) {
-      const s = (Array.isArray(c.summary) ? c.summary[0] : c.summary) as
-        | { summary: string; mood_score: number | null; ate_today: boolean | null;
-            slept_well: boolean | null; meds_taken: boolean | null; flags: Flag[];
-            tomorrow_topic: string | null }
-        | null;
+    const kind = (c.kind as string) ?? "checkin";
+    // Only a real check-in can speak for the day. A 90-second pill reminder
+    // has no business setting the mood colour on a family's page.
+    const isCheckin = kind === "checkin" || kind === "evening";
+    const s = (Array.isArray(c.summary) ? c.summary[0] : c.summary) as
+      | { summary: string; mood_score: number | null; ate_today: boolean | null;
+          slept_well: boolean | null; meds_taken: boolean | null; flags: Flag[];
+          tomorrow_topic: string | null }
+      | null;
+
+    if (c.status === "completed" && isCheckin && !cur.completed) {
       cur.completed = true;
       cur.missed = false;
       cur.id = c.id as string;
       cur.recordingShared = c.recording_shared === true;
+      cur.recordingPurged = !!c.recording_purged_at;
       cur.minutes = Math.max(1, Math.round((c.duration_seconds ?? 60) / 60));
       cur.seconds = (c.duration_seconds as number) ?? 0;
       if (s) {
@@ -512,7 +563,17 @@ Deno.serve(async (req) => {
         cur.meds = typeof s.meds_taken === "boolean" ? s.meds_taken : null;
         cur.tomorrow = s.tomorrow_topic;
       }
-    } else if (c.status === "no_answer" && !cur.completed) {
+    } else if (c.status === "completed") {
+      cur.extras.push({
+        kind,
+        minutes: Math.max(1, Math.round((c.duration_seconds ?? 60) / 60)),
+        summary: s?.summary ?? null,
+      });
+      // A second check-in still counts a flag: it happened on this day too.
+      if (isCheckin && s && Array.isArray(s.flags)) {
+        cur.urgent = cur.urgent || s.flags.some(isUrgent);
+      }
+    } else if (c.status === "no_answer" && isCheckin && !cur.completed) {
       cur.missed = true;
     } else if (c.status === "scheduled" || c.status === "in_progress") {
       cur.pending = true;
@@ -570,7 +631,7 @@ Deno.serve(async (req) => {
   // A day whose only row is a queued retry has nothing to show yet — it counts
   // for the verdict ("still trying") but not as an entry in the history.
   const days = [...byDate.values()]
-    .filter((d) => d.completed || d.missed)
+    .filter((d) => d.completed || d.missed || d.extras.length > 0)
     .sort((a, b) => b.date.localeCompare(a.date));
   const today = fmt.format(new Date());
   const todayEntry = byDate.get(today);
@@ -699,6 +760,12 @@ ${showWeek && wk[1] > 1 ? `<span class="wk">${ratio(wk)} this week</span>` : ""}
   }
 
   function player(day: Day): string {
+    // Retention, said out loud rather than as a broken player.
+    if (day.recordingPurged) {
+      return `<div class="audio quiet"><svg><use href="#i-lock"/></svg>
+<div>The audio from this call isn't kept any more — recordings are deleted after
+30 days${hasArchive ? "" : ", unless you keep the call archive"}. The note stays.</div></div>`;
+    }
     if (!day.recordingShared || !day.id) {
       return `<div class="audio quiet"><svg><use href="#i-lock"/></svg>
 <div>${esc(name)} chose not to share the call audio — you'll always get the note.</div></div>`;
@@ -710,7 +777,28 @@ ${showWeek && wk[1] > 1 ? `<span class="wk">${ratio(wk)} this week</span>` : ""}
   <div class="track-bar"><div class="track-fill"></div></div>
   <div class="track-meta"><b>Listen to the call</b><span class="t" data-full="${clock(day.seconds)}">${clock(day.seconds)}</span></div>
 </div>
-<audio preload="none" src="${SITE}/a/${token}/${day.id}"></audio></div>`;
+<audio preload="none" src="${SITE}/a/${token}/${day.id}"></audio>
+${
+        hasArchive
+          ? `<a class="dl" href="${SITE}/a/${token}/${day.id}?download=1" download>Save</a>`
+          : ""
+      }</div>`;
+  }
+
+  // The other calls that happened on the same day.
+  const EXTRA_LABEL: Record<string, string> = {
+    medication: "Medication reminder",
+    occasion: "A message from the family",
+    evening: "Evening check-in",
+    checkin: "Check-in",
+  };
+  function extras(day: Day): string {
+    if (!day.extras.length) return "";
+    const items = [...day.extras].reverse().map((e) =>
+      `<div class="also-item"><div><b>${esc(EXTRA_LABEL[e.kind] ?? "Call")}</b>
+ · ${e.minutes} min${e.summary ? `<br>${prose(e.summary)}` : ""}</div></div>`
+    ).join("");
+    return `<div class="also"><span class="lab">Also that day</span>${items}</div>`;
   }
 
   function notes(day: Day): string {
@@ -733,14 +821,20 @@ ${showWeek && wk[1] > 1 ? `<span class="wk">${ratio(wk)} this week</span>` : ""}
       return `<div class="panel${isLatest ? " accent" : ""}">
 ${isLatest ? `<div class="eyebrow">Most recent</div>` : ""}
 <div class="panel-head"><span class="panel-date">${prettyDate(day.date)}</span></div>
-<div class="note ${day.pending ? "watch" : "urgent"}" style="margin-top:12px">
+${
+        day.missed
+          ? `<div class="note ${day.pending ? "watch" : "urgent"}" style="margin-top:12px">
 <svg><use href="#i-phone-off"/></svg>
 <div><span class="lab">No answer</span>${
-        day.pending
-          ? `Etta called and got no answer. She'll try again shortly.`
-          : `Etta tried ${esc(name)} several times that day and couldn't ` +
-            `get through.`
-      }</div></div></div>`;
+            day.pending
+              ? `Etta called and got no answer. She'll try again shortly.`
+              : `Etta tried ${esc(name)} several times that day and couldn't ` +
+                `get through.`
+          }</div></div>`
+          : `<p class="prose" style="color:var(--ink-soft)">No check-in was
+scheduled that day.</p>`
+      }
+${extras(day)}</div>`;
     }
     // 6. what Etta will follow up on next time
     const ask = isLatest && day.tomorrow
@@ -760,7 +854,8 @@ ${tiles(day, isLatest)}
 <p class="prose">${prose(day.summary ?? "")}</p>
 ${ask}
 ${player(day)}
-${notes(day)}</div>`;
+${notes(day)}
+${extras(day)}</div>`;
   }
 
   // ---------- 5. chart, or an honest sparse state ----------
@@ -851,7 +946,7 @@ week that Etta flagged for you — they're in the days below.`;
 <p class="because">${esc(because)}</p>
 <div class="actions">
 ${tel ? `<a class="act primary" href="tel:${esc(tel)}"><svg><use href="#i-phone"/></svg>Call ${esc(name)}</a>` : ""}
-<a class="act" href="${SITE}/b/${token}">Billing &amp; plan</a>
+<a class="act" href="${SITE}/m/${token}">Your plan</a>
 </div>
 ${nextLine}
 ${statusBanner}
@@ -861,14 +956,35 @@ ${latest ? dayPanel(latest, true) : ""}
 ${earlier.length ? `<h2 class="section">Earlier days</h2>` : ""}
 ${
     earlier.map((day) => `<details><summary>
-<span class="pip ${day.completed ? "" : "miss"}" style="${
+<span class="pip ${day.completed ? "" : day.missed ? "miss" : ""}" style="${
       day.completed ? `background:${moodColor(day.mood, day.urgent)}` : ""
     }"></span>
 <span>${prettyDate(day.date)}</span>
 <span class="when-word">${
-      day.completed ? (day.mood ? MOOD_WORDS[day.mood] : "") : "no answer"
+      day.completed
+        ? (day.mood ? MOOD_WORDS[day.mood] : "")
+        : day.missed
+        ? "no answer"
+        : (EXTRA_LABEL[day.extras[0]?.kind ?? ""] ?? "").toLowerCase()
     }</span><span class="chev">▾</span></summary>${dayPanel(day, false)}</details>`).join("")
   }
+${
+    (alsoOnAccount ?? []).length
+      ? `<h2 class="section">Also on this account</h2>
+${
+        ((alsoOnAccount ?? []) as Row[]).map((o) =>
+          `<a class="manage" style="margin-right:8px" href="${SITE}/f/${
+            esc(o.share_token as string)
+          }">${esc((o.preferred_name || o.first_name) as string)}'s check-ins</a>`
+        ).join("")
+      }`
+      : ""
+  }
+<div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:8px">
+<a class="manage" href="${SITE}/r/${token}"><svg><use href="#i-spark"/></svg>${
+    hasReport ? "Monthly care report" : "See a monthly care report"
+  }</a>
+<a class="manage" href="${SITE}/b/${token}">Manage billing</a></div>
 <div class="foot"><b>Private to your family.</b> Anyone with this exact link can view this
 page — that's what makes it work without logins or apps. Keep it in the family; to get a
 fresh link (and retire this one), reply to Etta's number.<br><br>

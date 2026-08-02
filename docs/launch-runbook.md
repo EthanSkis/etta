@@ -135,6 +135,17 @@ cron (every 10 min)
         texts the family note (Twilio SMS, from Etta's own number)
         no answer → retry in 30 min (×3) → escalation text to contact chain
         "stop calling me" → consent revoked, schedules off, family told
+
+cron (daily)
+  ├─▶ edge fn: care-reports     on the senior-local 1st, texts the monthly
+  │                             report link to families holding the add-on
+  └─▶ edge fn: retention-sweep  deletes call audio past its window (30 days,
+                                or a year with the call-archive add-on)
+
+the family's own pages (capability tokens, no login):
+  /f/<token>      check-ins          /m/<token>      your plan + add-ons
+  /r/<token>      monthly report     /b/<token>      Stripe portal
+  /split/<token>  a sibling's share of the bill
 ```
 
 Supabase project: `kkqgxojxsfqgfpzdyzjv` (same one that holds the waitlist).
@@ -163,6 +174,31 @@ supabase secrets set --project-ref kkqgxojxsfqgfpzdyzjv \
   STRIPE_SECRET_KEY="sk_live_..." \   # click "Reveal" in Stripe first — a masked
                                      # key contains "…" and silently breaks checkout
   STRIPE_WEBHOOK_SECRET="whsec_..."   # from the webhook endpoint, see below
+```
+
+Optional price overrides. Every plan and add-on reads its Stripe price from a
+secret, and falls back to creating one under a stable lookup key the first
+time it's sold (see `_shared/catalog.ts` and `ensureRecurringPrice`). Set
+these when you'd rather control the prices in the dashboard:
+
+```bash
+supabase secrets set --project-ref kkqgxojxsfqgfpzdyzjv \
+  STRIPE_PRICE_STANDARD="price_..."          STRIPE_PRICE_DAILY="price_..." \
+  STRIPE_PRICE_COMPANION="price_..."         STRIPE_PRICE_SECOND_PARENT="price_..." \
+  STRIPE_PRICE_EVENING_CALL="price_..."      STRIPE_PRICE_MED_REMINDERS="price_..." \
+  STRIPE_PRICE_CARE_REPORT="price_..."       STRIPE_PRICE_RECORDING_ARCHIVE="price_..." \
+  STRIPE_PRICE_CARE_SEAT="price_..."         STRIPE_PRICE_CONCIERGE="price_..." \
+  STRIPE_PRICE_OCCASION_CALL="price_..."
+```
+
+**Companion ($69) will not sell until its price exists** — the plan is hidden
+on the manage page without one, and signup rejects it. Either set
+`STRIPE_PRICE_COMPANION`, or create it once with the lookup key the code uses:
+
+```bash
+stripe prices create --currency usd --unit-amount 6900 \
+  --recurring interval=month --product-data name="Etta — Companion" \
+  --lookup-key etta_plan_companion
 ```
 
 Until the `VAPI_*` secrets exist, `place-due-calls` runs in **dry-run**: it
@@ -201,6 +237,32 @@ select cron.schedule(
   $$
 );
 ```
+
+Then the two daily housekeeping jobs — the monthly report and the retention
+sweep. Both take the same `x-etta-cron-secret` header:
+
+```sql
+select cron.schedule(
+  'etta-care-reports', '20 * * * *',   -- hourly: acts only on the senior-local 1st, 8–11am
+  $$ select net.http_post(
+       url := 'https://kkqgxojxsfqgfpzdyzjv.supabase.co/functions/v1/care-reports',
+       headers := jsonb_build_object('Content-Type','application/json',
+                                     'x-etta-cron-secret','PASTE_CRON_SECRET_HERE')); $$
+);
+select cron.schedule(
+  'etta-retention-sweep', '40 4 * * *',  -- once a day, quiet hours
+  $$ select net.http_post(
+       url := 'https://kkqgxojxsfqgfpzdyzjv.supabase.co/functions/v1/retention-sweep',
+       headers := jsonb_build_object('Content-Type','application/json',
+                                     'x-etta-cron-secret','PASTE_CRON_SECRET_HERE')); $$
+);
+```
+
+`care-reports` runs hourly rather than daily because "the first of the month,
+in the morning" is a different moment in Honolulu than in New York; it checks
+each senior's own clock and does nothing the rest of the time. It sweeps at
+most 400 calls per run, so a backlog clears over a few days rather than in one
+long request.
 
 (The secret lives inside the cron job definition in your own database —
 acceptable for now; move it to Vault when convenient.)
@@ -246,10 +308,68 @@ yes → calls → first charge. The code keeps that promise on every branch:
 - `past_due` deliberately keeps calling: a card that needs updating shouldn't
   cut off someone's daily check-in. The family gets a text instead.
 
-Plans map to frequency: `standard` ($19) = Mon/Wed/Fri, `daily` ($39) = every
-day. Families manage card, plan, and cancellation through the Stripe portal,
-reached from the "Manage billing" link on their family page — no login, same
-capability-token model as the page itself.
+Plans map to frequency: `standard` ($19) = Mon/Wed/Fri, `daily` ($39) and
+`companion` ($69) = every day, with Companion also raising the per-call
+ceiling to 18 minutes. Families manage card and cancellation through the
+Stripe portal, reached from the "Manage billing" link on their family page —
+no login, same capability-token model as the page itself.
+
+### Add-ons, and the two rules they had to keep
+
+Everything beyond the plan is bought by the family at `/m/<share_token>`
+("Your plan"), which is `supabase/functions/addons`. Nothing is ever sold
+inside a call — that is the brand, and it is also why these calls sit outside
+telemarketing law and PECR. The system prompt says so explicitly, including
+what Etta answers if a senior asks what it costs.
+
+| Add-on | Price | What it actually does |
+|---|---|---|
+| Second parent | $15/mo | A whole second senior on the account: own phone, own schedule, own consent call |
+| Evening call | $19/mo | A second `call_schedules` row, `kind='evening'`, with its own time |
+| Medication reminders | $9/mo | `kind='medication'`, daily, ~90 seconds, its own opening line and a 150-second ceiling |
+| Monthly care report | $9/mo | Unlocks `/r/<token>` and the monthly text from `care-reports` |
+| Call archive | $6/mo | Retention 30 days → 365, and a download link on shared recordings |
+| Extra recipients | $5/mo each | Quantity follows the recipient list; the plan's included seats come first |
+| Occasion call | $5 once | One dated, paid call with a message Etta passes along in her own voice |
+| Concierge setup | $49 once | A human walks the family through it; bought at signup or later |
+
+The two rules the code enforces, both of which have teeth:
+
+1. **A call to a new person is never billed before that person's own yes.**
+   Adding a second parent writes a `subscription_addons` row with
+   `status='pending_consent'` and *no* Stripe line item. The line item is
+   created in `call-events` when they consent on their own inbound setup call.
+   If Stripe fails at that moment, the calls still start — the add-on simply
+   stays unbilled, which errs against us rather than against them.
+2. **One parent's "stop calling me" doesn't cancel the other parent's calls.**
+   `stopBillingForSenior` removes that senior's add-on if they arrived as one,
+   and only cancels the whole subscription if they're the senior the account
+   was opened for.
+
+Other money paths worth knowing:
+
+- **Prorations are on** for every add and remove, so a mid-month change costs
+  the days it covers and nothing more. During the trial, adding an add-on
+  costs nothing at all.
+- **Concierge at signup** is a one-time line on the same Checkout session. With
+  the trial running, Stripe bills it with the first real invoice — so it is
+  charged only after the senior has said yes, and never if they decline. That
+  means we may do the concierge call before we're paid for it. That's the
+  right side to be wrong on; revisit it if it's ever abused.
+- **Occasion calls** are `mode=payment` Checkout sessions; the webhook flips
+  the row to `scheduled` on payment. If Etta can't reach the senior after the
+  retries, `call-events` refunds it without being asked and tells the family.
+- **Cost sharing** (`/split/<invite_token>`): each contributor holds their own
+  small subscription on their own card. Every paid contributor invoice is
+  credited to the account holder's Stripe customer balance, so it comes off
+  their next bill. Contributors are invited by the account holder sending the
+  link themselves — we do not text an invite to a number that has never
+  consented to hear from Etta. `syncCostShare` keeps a contributor's
+  subscription from ever being mistaken for the family's own.
+- **Recording retention** is 30 days by default, 365 with the archive add-on.
+  The sweep asks the provider to delete its copy too, then clears our
+  reference; `audio` refuses purged calls regardless, so a provider failure
+  can't leave audio reachable through Etta.
 
 ### Manual onboarding (fallback, or non-self-serve pilots)
 

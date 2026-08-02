@@ -2,22 +2,41 @@
 // promise that nobody pays for calls their parent never agreed to.
 //
 // Handled events:
-//   checkout.session.completed      → link customer + subscription to family
+//   checkout.session.completed      → link customer + subscription to family;
+//                                     also occasion calls, concierge setup,
+//                                     and a sibling starting their share
 //   customer.subscription.*         → sync status/plan/dates; canceled stops calls
 //   customer.subscription.trial_will_end → if the senior still hasn't consented,
 //                                     cancel before the first charge
+//   invoice.paid                    → a contributor's payment becomes credit on
+//                                     the account holder's next bill
 //   invoice.payment_failed          → recorded; calls continue through past_due
 //
 // Signature is verified manually (HMAC-SHA256 over "timestamp.body") so the
 // function stays dependency-free.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { money, PLANS, planLookupKey, planPriceId } from "../_shared/catalog.ts";
+import { creditCustomer, stripe } from "../_shared/stripe.ts";
+import { sendText } from "../_shared/sms.ts";
 
 const TOLERANCE_SECONDS = 300;
-const PRICE_PLANS: Record<string, string> = {
-  price_1TzO26A8l4yd6OUzIGnqRkhB: "standard",
-  price_1TzO27A8l4yd6OUzhi1l2T3b: "daily",
-};
+
+/**
+ * Which plan a Stripe price belongs to. Matched by ID when the price came
+ * from a secret, and by lookup key when the code created it on first sale —
+ * otherwise a plan bootstrapped that way would never sync back.
+ */
+// deno-lint-ignore no-explicit-any
+function planForPrice(price: any): string | null {
+  const id = price?.id ?? "";
+  const lookup = price?.lookup_key ?? "";
+  for (const plan of Object.values(PLANS)) {
+    if (id && planPriceId(plan) === id) return plan.key;
+    if (lookup && planLookupKey(plan) === lookup) return plan.key;
+  }
+  return null;
+}
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -68,36 +87,6 @@ async function verifySignature(
   return diff === 0;
 }
 
-async function stripe(path: string, body?: Record<string, string>): Promise<unknown> {
-  const res = await fetch(`https://api.stripe.com/v1/${path}`, {
-    method: body ? "POST" : "GET",
-    headers: {
-      Authorization: `Bearer ${(Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim()}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: body ? new URLSearchParams(body) : undefined,
-  });
-  if (!res.ok) console.error("stripe api error:", path, res.status, await res.text());
-  return res.json();
-}
-
-async function sendText(to: string[], body: string) {
-  const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
-  const token = Deno.env.get("TWILIO_AUTH_TOKEN");
-  const from = Deno.env.get("TWILIO_FROM_NUMBER") ?? "+17622394275";
-  if (!sid || !token) return;
-  for (const number of to) {
-    await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
-      method: "POST",
-      headers: {
-        Authorization: "Basic " + btoa(`${sid}:${token}`),
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ From: from, To: number, Body: body }),
-    });
-  }
-}
-
 // deno-lint-ignore no-explicit-any
 async function familyForSubscription(sub: any) {
   const metaId = sub?.metadata?.family_id;
@@ -113,14 +102,40 @@ async function familyForSubscription(sub: any) {
   return null;
 }
 
+/**
+ * A sibling's contribution subscription, kept entirely separate from the
+ * family's own. It carries cost_share_id in its metadata; without this guard
+ * it would look like just another subscription for the same family and
+ * overwrite the real one.
+ */
+// deno-lint-ignore no-explicit-any
+async function syncCostShare(sub: any): Promise<boolean> {
+  const shareId = sub?.metadata?.cost_share_id;
+  if (!shareId) return false;
+
+  const dead = ["canceled", "unpaid", "incomplete_expired"].includes(sub.status);
+  await supabase.from("cost_shares").update({
+    stripe_subscription_id: sub.id,
+    status: dead ? "canceled" : "active",
+    ...(dead ? { canceled_at: new Date().toISOString() } : {}),
+  }).eq("id", shareId);
+  return true;
+}
+
 // deno-lint-ignore no-explicit-any
 async function syncSubscription(sub: any) {
+  if (await syncCostShare(sub)) return null;
   const family = await familyForSubscription(sub);
   if (!family) {
     console.error("no family for subscription", sub?.id);
     return;
   }
-  const priceId = sub?.items?.data?.[0]?.price?.id ?? "";
+  // The plan is whichever line item carries a plan price — with add-ons on
+  // the subscription, it is no longer safe to assume that's items.data[0].
+  // deno-lint-ignore no-explicit-any
+  const planKey = (sub?.items?.data ?? [])
+    .map((i: any) => planForPrice(i?.price))
+    .find((k: string | null) => !!k) ?? null;
   const patch: Record<string, unknown> = {
     stripe_subscription_id: sub.id,
     stripe_customer_id: sub.customer ?? family.stripe_customer_id,
@@ -130,7 +145,7 @@ async function syncSubscription(sub: any) {
       ? new Date(sub.current_period_end * 1000).toISOString()
       : null,
   };
-  if (PRICE_PLANS[priceId]) patch.plan = PRICE_PLANS[priceId];
+  if (planKey) patch.plan = planKey;
   await supabase.from("families").update(patch).eq("id", family.id);
 
   // Subscription over: stop the calls, but never touch consent history.
@@ -145,6 +160,21 @@ async function syncSubscription(sub: any) {
     }
   }
   return family;
+}
+
+/** White-glove setup is paid for: record it, and tell them what happens next. */
+async function markConciergeBooked(familyId: string) {
+  await supabase.from("families")
+    .update({ concierge_purchased_at: new Date().toISOString() })
+    .eq("id", familyId);
+  const { data: fam } = await supabase.from("families")
+    .select("primary_contact_phone").eq("id", familyId).maybeSingle();
+  if (fam?.primary_contact_phone) {
+    await sendText([fam.primary_contact_phone],
+      `Etta here — concierge setup is booked. A person from Etta will call you ` +
+      `within one business day to walk you through it, and can stay on the line ` +
+      `for your parent's setup call if you'd like. — Etta`);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -168,6 +198,33 @@ Deno.serve(async (req) => {
 
   switch (event.type) {
     case "checkout.session.completed": {
+      // A sibling just started their share of someone's bill.
+      const shareId = object?.metadata?.cost_share_id;
+      if (shareId) {
+        await supabase.from("cost_shares").update({
+          status: "active",
+          stripe_customer_id: object.customer,
+          stripe_subscription_id: object.subscription,
+        }).eq("id", shareId);
+        break;
+      }
+
+      // A paid one-off: an occasion call, or concierge setup.
+      const occasionId = object?.metadata?.occasion_id;
+      if (occasionId && object.payment_status === "paid") {
+        await supabase.from("occasion_calls").update({
+          status: "scheduled",
+          paid_at: new Date().toISOString(),
+          stripe_payment_intent: object.payment_intent ?? null,
+        }).eq("id", occasionId);
+        break;
+      }
+      // Concierge bought on its own, from the manage page.
+      if (object?.metadata?.purpose === "concierge_setup" && familyId && !object.subscription) {
+        await markConciergeBooked(familyId);
+        break;
+      }
+
       if (object.subscription && familyId) {
         await supabase.from("families").update({
           stripe_customer_id: object.customer,
@@ -175,6 +232,11 @@ Deno.serve(async (req) => {
         }).eq("id", familyId);
         const sub = await stripe(`subscriptions/${object.subscription}`);
         await syncSubscription(sub);
+        // Concierge chosen at signup rides along on the same checkout, as a
+        // one-time line billed with the first real invoice.
+        if (object?.metadata?.purpose === "concierge_setup") {
+          await markConciergeBooked(familyId);
+        }
       }
       break;
     }
@@ -195,10 +257,7 @@ Deno.serve(async (req) => {
         const { data: active } = await supabase.from("seniors")
           .select("id").eq("family_id", family.id).eq("status", "active").limit(1);
         if (!active || active.length === 0) {
-          await fetch(`https://api.stripe.com/v1/subscriptions/${object.id}`, {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${(Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim()}` },
-          });
+          await stripe(`subscriptions/${object.id}`, undefined, "DELETE");
           if (family.primary_contact_phone) {
             await sendText([family.primary_contact_phone],
               `Etta here — your trial is ending and we never got a yes from your ` +
@@ -206,6 +265,53 @@ Deno.serve(async (req) => {
               `a cent. Whenever they're ready, sign up again at ettacalls.com. — Etta`);
           }
         }
+      }
+      break;
+    }
+    case "invoice.paid":
+    case "invoice.payment_succeeded": {
+      // Only contributor invoices do anything here: their money becomes a
+      // credit on the account holder's Stripe balance, so it comes straight
+      // off the next bill rather than being settled between siblings.
+      const subId = object.subscription ??
+        object.parent?.subscription_details?.subscription ?? null;
+      const paid = Number(object.amount_paid ?? 0);
+      if (!subId || paid <= 0) break;
+
+      const { data: share } = await supabase.from("cost_shares")
+        .select("*").eq("stripe_subscription_id", subId).maybeSingle();
+      if (!share) break;
+
+      familyId = share.family_id;
+      const { data: family } = await supabase.from("families")
+        .select("id, stripe_customer_id, primary_contact_phone")
+        .eq("id", share.family_id).maybeSingle();
+
+      if (family?.stripe_customer_id) {
+        try {
+          await creditCustomer(
+            family.stripe_customer_id,
+            paid,
+            `${share.name}'s share of Etta`,
+          );
+        } catch (err) {
+          console.error("cost share credit failed:", share.id, err);
+          break;
+        }
+      }
+
+      const first = share.status !== "active" || share.contributed_cents === 0;
+      await supabase.from("cost_shares").update({
+        status: "active",
+        contributed_cents: (share.contributed_cents ?? 0) + paid,
+        last_paid_at: new Date().toISOString(),
+      }).eq("id", share.id);
+
+      if (first && family?.primary_contact_phone) {
+        await sendText([family.primary_contact_phone],
+          `Etta here — ${share.name} just picked up ${money(paid)} a month of ` +
+          `Etta's calls. It's credited to your account, so your next bill is ` +
+          `lower by exactly that much. — Etta`);
       }
       break;
     }

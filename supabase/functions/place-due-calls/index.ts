@@ -5,7 +5,12 @@
 // TIMEZONE, whether their chosen call time has arrived today, creates the
 // call row (once per schedule per local day), and places the call through
 // Vapi. Also places any pending retry rows created by the call-events
-// webhook after a no-answer.
+// webhook after a no-answer, and any paid occasion call falling due today.
+//
+// A senior may now have more than one standing call — the plan's check-in,
+// an evening check-in, medication reminders — and the schedule's `kind` is
+// what tells Etta which one she's making. One consent covers all of them:
+// they are all Etta calling, which is what the senior said yes to.
 //
 // Consent is enforced here, not just at signup: only seniors with
 // status='active' are ever called, and the status is re-checked immediately
@@ -16,9 +21,14 @@
 // creates nothing, places nothing.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { planFor } from "../_shared/catalog.ts";
 
 const GRACE_MINUTES = 45; // place a due call up to 45 min late (cron gaps, downtime)
 const STALE_HOURS = 2;    // scheduled rows older than this are marked failed, not placed
+
+// A pill reminder is a reminder, not a visit: it should be over in a minute.
+// An occasion call is a delivery plus a little warmth, not a full check-in.
+const MAX_SECONDS_BY_KIND: Record<string, number> = { medication: 150, occasion: 420 };
 
 // Billing states that still get calls. past_due is deliberate: a card that
 // needs updating shouldn't cut off someone's daily check-in mid-retry.
@@ -30,6 +40,11 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
+
+// Rows come back from PostgREST with joins inlined; the generated types don't
+// describe those, so query results are read as plain rows.
+// deno-lint-ignore no-explicit-any
+type Row = any;
 
 interface LocalNow {
   date: string;    // YYYY-MM-DD in the senior's timezone
@@ -93,7 +108,7 @@ Deno.serve(async (req) => {
   const { data: schedules, error: schedErr } = await supabase
     .from("call_schedules")
     .select(
-      "id, call_time, days_of_week, senior:seniors!inner(id, status, timezone, " +
+      "id, call_time, days_of_week, kind, senior:seniors!inner(id, status, timezone, " +
         "family:families!inner(subscription_status))",
     )
     .eq("active", true)
@@ -106,7 +121,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  for (const sched of schedules ?? []) {
+  for (const sched of (schedules ?? []) as Row[]) {
     report.schedulesChecked++;
     const senior = sched.senior as unknown as {
       id: string; status: string; timezone: string;
@@ -136,6 +151,7 @@ Deno.serve(async (req) => {
       scheduled_for: new Date().toISOString(),
       scheduled_local_date: now.date,
       attempt_number: 1,
+      kind: (sched.kind as string) ?? "checkin",
     });
     if (insErr) {
       // 23505 = unique violation: another tick beat us to it; fine.
@@ -144,6 +160,47 @@ Deno.serve(async (req) => {
       }
       continue;
     }
+    report.created++;
+  }
+
+  // 1b. Paid occasion calls falling due today — a birthday, or a message the
+  //     family asked Etta to pass along. Same consent gate as everything
+  //     else: the senior must be active, and the subscription must be live.
+  const { data: occasions, error: occErr } = await supabase
+    .from("occasion_calls")
+    .select(
+      "id, call_time, local_date, senior:seniors!inner(id, status, timezone, " +
+        "family:families!inner(subscription_status))",
+    )
+    .eq("status", "scheduled")
+    .eq("seniors.status", "active")
+    .in("seniors.families.subscription_status", PAYING_STATUSES);
+  if (occErr) report.errors.push(`occasions query: ${occErr.message}`);
+
+  for (const occ of (occasions ?? []) as Row[]) {
+    const senior = occ.senior as unknown as { id: string; timezone: string };
+    const now = localNow(senior.timezone);
+    if (now.date !== occ.local_date) continue;
+    const occMinutes = timeToMinutes(occ.call_time as string);
+    if (now.minutes < occMinutes || now.minutes > occMinutes + GRACE_MINUTES) continue;
+    report.due.push(`occasion:${occ.id}`);
+    if (dryRun) continue;
+
+    const { error: insErr } = await supabase.from("calls").insert({
+      senior_id: senior.id,
+      scheduled_for: new Date().toISOString(),
+      scheduled_local_date: now.date,
+      attempt_number: 1,
+      kind: "occasion",
+      occasion_id: occ.id,
+    });
+    if (insErr) {
+      if (!insErr.message.includes("duplicate")) {
+        report.errors.push(`occasion insert ${occ.id}: ${insErr.message}`);
+      }
+      continue;
+    }
+    await supabase.from("occasion_calls").update({ status: "placed" }).eq("id", occ.id);
     report.created++;
   }
 
@@ -158,9 +215,12 @@ Deno.serve(async (req) => {
   const { data: pending, error: pendErr } = await supabase
     .from("calls")
     .select(
-      "id, scheduled_for, attempt_number, senior:seniors!inner(" +
+      "id, scheduled_for, attempt_number, kind, occasion_id, " +
+        "schedule:call_schedules(label), " +
+        "occasion:occasion_calls(occasion, from_name, message), " +
+        "senior:seniors!inner(" +
         "id, status, first_name, preferred_name, phone, timezone, notes, share_recordings, " +
-        "family:families!inner(primary_contact_name, subscription_status))",
+        "family:families!inner(primary_contact_name, subscription_status, plan))",
     )
     .eq("status", "scheduled")
     .is("provider_call_id", null)
@@ -169,12 +229,16 @@ Deno.serve(async (req) => {
     report.errors.push(`pending query: ${pendErr.message}`);
   }
 
-  for (const call of pending ?? []) {
+  for (const call of (pending ?? []) as Row[]) {
     const senior = call.senior as unknown as {
       id: string; status: string; first_name: string;
       preferred_name: string | null; phone: string; timezone: string;
       notes: string | null; share_recordings: string;
-      family: { primary_contact_name: string; subscription_status: string | null };
+      family: {
+        primary_contact_name: string;
+        subscription_status: string | null;
+        plan: string | null;
+      };
     };
 
     // Consent re-check at the last possible moment.
@@ -215,6 +279,31 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
+    const kind = (call.kind as string) ?? "checkin";
+    const plan = planFor(senior.family.plan);
+    const name = senior.preferred_name || senior.first_name;
+    const occasion = (Array.isArray(call.occasion) ? call.occasion[0] : call.occasion) as
+      | { occasion: string; from_name: string; message: string }
+      | null;
+    const schedule = (Array.isArray(call.schedule) ? call.schedule[0] : call.schedule) as
+      | { label: string | null }
+      | null;
+    const medLabel = schedule?.label || "your pills";
+
+    // Etta opens differently depending on why she's calling — and on every
+    // one of them she says what she is in the first breath.
+    const firstMessage = kind === "medication"
+      ? `Hi ${name}, it's Etta — your AI check-in companion. Just a quick one: ` +
+        `it's time for ${medLabel}. Have you had a chance to take them?`
+      : kind === "occasion"
+      ? `Hi ${name}, it's Etta — your AI companion. This isn't the usual check-in: ` +
+        `${occasion?.from_name ?? "your family"} asked me to call you today with ` +
+        `something.`
+      : kind === "evening"
+      ? `Hi ${name}, it's Etta again — your AI companion, checking in one more ` +
+        `time before the day's out. How did it go?`
+      : undefined; // the assistant's own first message covers the morning call
+
     const res = await fetch("https://api.vapi.ai/call", {
       method: "POST",
       headers: {
@@ -225,8 +314,10 @@ Deno.serve(async (req) => {
         assistantId: vapiAssistant,
         phoneNumberId: vapiPhoneNumber,
         customer: { number: senior.phone },
-        metadata: { call_id: call.id, senior_id: senior.id },
+        metadata: { call_id: call.id, senior_id: senior.id, kind },
         assistantOverrides: {
+          ...(firstMessage ? { firstMessage } : {}),
+          maxDurationSeconds: MAX_SECONDS_BY_KIND[kind] ?? plan.maxCallSeconds,
           // NO transcriber override here, deliberately. Boosting the senior's
           // name with Deepgram's per-call `keyterm` fixed "Eila" being heard as
           // "Hila" — but every call carrying it died before the assistant
@@ -238,14 +329,25 @@ Deno.serve(async (req) => {
           // revisited, prove it on a test number first — the API accepts the
           // override and fails later, so a 200 from Vapi means nothing here.
           variableValues: {
-            preferred_name: senior.preferred_name || senior.first_name,
+            preferred_name: name,
             family_contact: senior.family.primary_contact_name,
             senior_notes: senior.notes || "",
             last_call_summary: lastSummary?.summary || "",
             ask_about: lastSummary?.tomorrow_topic || "",
             attempt_number: String(call.attempt_number),
-            // Etta only raises the recording question while it's unanswered.
-            ask_recording: senior.share_recordings === "unknown" ? "yes" : "no",
+            // Etta only raises the recording question while it's unanswered,
+            // and never on a call that isn't a proper check-in.
+            ask_recording: senior.share_recordings === "unknown" && kind === "checkin"
+              ? "yes"
+              : "no",
+            call_kind: kind,
+            call_length_guidance: kind === "checkin" || kind === "evening"
+              ? plan.lengthGuidance
+              : "",
+            med_label: kind === "medication" ? medLabel : "",
+            occasion_kind: occasion?.occasion ?? "",
+            occasion_from: occasion?.from_name ?? "",
+            occasion_message: occasion?.message ?? "",
           },
         },
       }),
