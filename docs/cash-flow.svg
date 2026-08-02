@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="720" viewBox="0 0 1120 720" font-family="ui-sans-serif,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif">
+<style>
+  :root{--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;
+        --cost:#2a78d6;--total:#52514e;--good:#0ca30c;--bad:#d03b3b;--chip:#f0efec}
+  @media (prefers-color-scheme:dark){:root{--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;
+        --grid:#2c2c2a;--axis:#383835;--cost:#3987e5;--total:#c3c2b7;--good:#0ca30c;--bad:#d03b3b;--chip:#26262410}}
+  .t{fill:var(--ink);font-size:27px;font-weight:650;letter-spacing:-.3px}
+  .st{fill:var(--ink2);font-size:15px}
+  .ax{fill:var(--muted);font-size:12.5px}
+  .cat{fill:var(--ink);font-size:14px;font-weight:600}
+  .sub{fill:var(--muted);font-size:11.5px}
+  .val{fill:var(--ink);font-size:14.5px;font-weight:650}
+  .pctl{fill:var(--muted);font-size:11px}
+  .note{fill:var(--ink2);font-size:13.5px}
+  .noteb{fill:var(--ink);font-size:13.5px;font-weight:650}
+</style>
+<rect width="1120" height="720" fill="var(--surface)"/>
+<text class="t" x="96" y="52">Where one subscriber's $39 goes each month</text>
+<text class="st" x="96" y="80">Daily plan · 4.5-minute calls · 2 SMS recipients · 80% answer rate · % figures are share of revenue</text>
+<text class="st" x="96" y="102" fill="var(--muted)">Modelled from vendor list prices, Aug 2026 — scripts/unit-economics.mjs</text>
+<line x1="96" x2="1076" y1="506" y2="506" stroke="var(--grid)" stroke-width="1"/>
+<text class="ax" x="84" y="510" text-anchor="end">$0</text>
+<line x1="96" x2="1076" y1="416.5" y2="416.5" stroke="var(--grid)" stroke-width="1"/>
+<text class="ax" x="84" y="420.5" text-anchor="end">$10</text>
+<line x1="96" x2="1076" y1="327" y2="327" stroke="var(--grid)" stroke-width="1"/>
+<text class="ax" x="84" y="331" text-anchor="end">$20</text>
+<line x1="96" x2="1076" y1="237.5" y2="237.5" stroke="var(--grid)" stroke-width="1"/>
+<text class="ax" x="84" y="241.5" text-anchor="end">$30</text>
+<line x1="96" x2="1076" y1="148" y2="148" stroke="var(--grid)" stroke-width="1"/>
+<text class="ax" x="84" y="152" text-anchor="end">$40</text>
+<line x1="187.44444444444446" x2="222.33333333333331" y1="156.95" y2="156.95" stroke="var(--axis)" stroke-width="1.5" stroke-dasharray="3 3"/>
+<line x1="296.3333333333333" x2="331.22222222222223" y1="220.0475" y2="220.0475" stroke="var(--axis)" stroke-width="1.5" stroke-dasharray="3 3"/>
+<line x1="405.22222222222223" x2="440.1111111111111" y1="267.1245" y2="267.1245" stroke="var(--axis)" stroke-width="1.5" stroke-dasharray="3 3"/>
+<line x1="514.1111111111111" x2="549" y1="292.36350000000004" y2="292.36350000000004" stroke="var(--axis)" stroke-width="1.5" stroke-dasharray="3 3"/>
+<line x1="623" x2="657.8888888888889" y1="309.995" y2="309.995" stroke="var(--axis)" stroke-width="1.5" stroke-dasharray="3 3"/>
+<line x1="731.8888888888889" x2="766.7777777777777" y1="325.568" y2="325.568" stroke="var(--axis)" stroke-width="1.5" stroke-dasharray="3 3"/>
+<line x1="840.7777777777777" x2="875.6666666666666" y1="338.3665" y2="338.3665" stroke="var(--axis)" stroke-width="1.5" stroke-dasharray="3 3"/>
+<line x1="949.6666666666666" x2="984.5555555555555" y1="348.48" y2="348.48" stroke="var(--axis)" stroke-width="1.5" stroke-dasharray="3 3"/>
+<rect x="113.4" y="156.9" width="74" height="349.1" rx="4" fill="var(--total)"/>
+<text class="val" x="150.44444444444446" y="136.9" text-anchor="middle">$39.00</text>
+<text class="pctl" x="150.44444444444446" y="149.9" text-anchor="middle">100.0%</text>
+<text class="cat" x="150.44444444444446" y="532" text-anchor="middle">Revenue</text>
+<text class="sub" x="150.44444444444446" y="549" text-anchor="middle">Daily plan</text>
+<rect x="222.3" y="156.9" width="74" height="63.1" rx="4" fill="var(--cost)"/>
+<text class="val" x="259.3333333333333" y="136.9" text-anchor="middle">−$7.05</text>
+<text class="pctl" x="259.3333333333333" y="149.9" text-anchor="middle">18.1%</text>
+<text class="cat" x="259.3333333333333" y="532" text-anchor="middle">Vapi</text>
+<text class="sub" x="259.3333333333333" y="549" text-anchor="middle">platform fee</text>
+<rect x="331.2" y="220.0" width="74" height="47.1" rx="4" fill="var(--cost)"/>
+<text class="val" x="368.22222222222223" y="200.0" text-anchor="middle">−$5.26</text>
+<text class="pctl" x="368.22222222222223" y="213.0" text-anchor="middle">13.5%</text>
+<text class="cat" x="368.22222222222223" y="532" text-anchor="middle">SMS</text>
+<text class="sub" x="368.22222222222223" y="549" text-anchor="middle">summaries ×2</text>
+<rect x="440.1" y="267.1" width="74" height="25.2" rx="4" fill="var(--cost)"/>
+<text class="val" x="477.1111111111111" y="247.1" text-anchor="middle">−$2.82</text>
+<text class="pctl" x="477.1111111111111" y="260.1" text-anchor="middle">7.2%</text>
+<text class="cat" x="477.1111111111111" y="532" text-anchor="middle">TTS</text>
+<text class="sub" x="477.1111111111111" y="549" text-anchor="middle">Etta's voice</text>
+<rect x="549.0" y="292.4" width="74" height="17.6" rx="4" fill="var(--cost)"/>
+<text class="val" x="586" y="272.4" text-anchor="middle">−$1.97</text>
+<text class="pctl" x="586" y="285.4" text-anchor="middle">5.1%</text>
+<text class="cat" x="586" y="532" text-anchor="middle">Twilio</text>
+<text class="sub" x="586" y="549" text-anchor="middle">the calls</text>
+<rect x="657.9" y="310.0" width="74" height="15.6" rx="4" fill="var(--cost)"/>
+<text class="val" x="694.8888888888889" y="290.0" text-anchor="middle">−$1.74</text>
+<text class="pctl" x="694.8888888888889" y="303.0" text-anchor="middle">4.5%</text>
+<text class="cat" x="694.8888888888889" y="532" text-anchor="middle">LLM</text>
+<text class="sub" x="694.8888888888889" y="549" text-anchor="middle">Haiku, cached</text>
+<rect x="766.8" y="325.6" width="74" height="12.8" rx="4" fill="var(--cost)"/>
+<text class="val" x="803.7777777777777" y="305.6" text-anchor="middle">−$1.43</text>
+<text class="pctl" x="803.7777777777777" y="318.6" text-anchor="middle">3.7%</text>
+<text class="cat" x="803.7777777777777" y="532" text-anchor="middle">Stripe</text>
+<text class="sub" x="803.7777777777777" y="549" text-anchor="middle">2.9% + 30¢</text>
+<rect x="875.7" y="338.4" width="74" height="10.1" rx="4" fill="var(--cost)"/>
+<text class="val" x="912.6666666666666" y="318.4" text-anchor="middle">−$1.13</text>
+<text class="pctl" x="912.6666666666666" y="331.4" text-anchor="middle">2.9%</text>
+<text class="cat" x="912.6666666666666" y="532" text-anchor="middle">STT</text>
+<text class="sub" x="912.6666666666666" y="549" text-anchor="middle">Deepgram</text>
+<rect x="984.6" y="348.5" width="74" height="157.5" rx="4" fill="var(--good)"/>
+<text class="val" x="1021.5555555555555" y="328.5" text-anchor="middle">$17.60</text>
+<text class="pctl" x="1021.5555555555555" y="341.5" text-anchor="middle">45.1%</text>
+<text class="cat" x="1021.5555555555555" y="532" text-anchor="middle">Margin</text>
+<text class="sub" x="1021.5555555555555" y="549" text-anchor="middle">what you keep</text>
+<line x1="96" x2="1076" y1="506" y2="506" stroke="var(--axis)" stroke-width="1.5"/>
+<line x1="96" x2="1076" y1="570" y2="570" stroke="var(--grid)" stroke-width="1"/>
+<circle cx="102" cy="600" r="5" fill="var(--good)"/>
+<text class="note" x="116" y="604"><tspan class="noteb">$17.60 kept</tspan> — 45% gross margin, every steady-state month.</text>
+<circle cx="102" cy="630" r="5" fill="var(--bad)"/>
+<text class="note" x="116" y="634"><tspan class="noteb">−$5.31 in month one.</tspan> Each paying customer also carries $22.91 of trial burn (14 free days at 40% conversion), so</text>
+<text class="note" x="116" y="654">it takes ~1.3 months of margin to break even — before any acquisition cost.</text>
+<text class="sub" x="116" y="678">Trial burn is amortised across a customer's lifetime, not a monthly outflow — which is why it sits outside the waterfall.</text>
+</svg>

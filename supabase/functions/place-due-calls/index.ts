@@ -26,6 +26,31 @@ const STALE_HOURS = 2;    // scheduled rows older than this are marked failed, n
 // friends-and-family, and B2B/partner trials — so they never depend on Stripe.
 const PAYING_STATUSES = ["trialing", "active", "past_due", "comped"];
 
+// ...but past_due can't be open-ended. Every call costs real money at the
+// provider, so a subscription that never resolves is unbounded free service:
+// on the Daily plan that is roughly $0.45/day of voice and SMS with no
+// revenue behind it. Stripe's own dunning normally terminates within ~3 weeks
+// (the webhook then flips the status to unpaid/canceled and calls stop), so
+// this is a backstop for the case where it doesn't — a misconfigured retry
+// policy, or a subscription parked in past_due. The grace window is generous
+// on purpose: honoring the promise above matters more than the last few
+// dollars, and a senior should never lose their check-in over a card the
+// family is actively fixing.
+const PAST_DUE_GRACE_DAYS = Number(Deno.env.get("PAST_DUE_GRACE_DAYS") ?? 21);
+
+// current_period_end is the last moment the family had paid for. Null means we
+// never saw a period from Stripe, in which case we keep calling rather than
+// cut someone off over missing data.
+function billingAllowsCall(
+  status: string | null,
+  currentPeriodEnd: string | null,
+): boolean {
+  if (!PAYING_STATUSES.includes(status ?? "")) return false;
+  if (status !== "past_due" || !currentPeriodEnd) return true;
+  const daysOverdue = (Date.now() - new Date(currentPeriodEnd).getTime()) / 8.64e7;
+  return daysOverdue <= PAST_DUE_GRACE_DAYS;
+}
+
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -94,7 +119,7 @@ Deno.serve(async (req) => {
     .from("call_schedules")
     .select(
       "id, call_time, days_of_week, senior:seniors!inner(id, status, timezone, " +
-        "family:families!inner(subscription_status))",
+        "family:families!inner(subscription_status, current_period_end))",
     )
     .eq("active", true)
     .eq("seniors.status", "active")
@@ -110,7 +135,11 @@ Deno.serve(async (req) => {
     report.schedulesChecked++;
     const senior = sched.senior as unknown as {
       id: string; status: string; timezone: string;
+      family: { subscription_status: string | null; current_period_end: string | null };
     };
+    if (!billingAllowsCall(
+      senior.family.subscription_status, senior.family.current_period_end,
+    )) continue;
     const now = localNow(senior.timezone);
     if (!(sched.days_of_week as number[]).includes(now.dow)) continue;
 
@@ -160,7 +189,7 @@ Deno.serve(async (req) => {
     .select(
       "id, scheduled_for, attempt_number, senior:seniors!inner(" +
         "id, status, first_name, preferred_name, phone, timezone, notes, share_recordings, " +
-        "family:families!inner(primary_contact_name, subscription_status))",
+        "family:families!inner(primary_contact_name, subscription_status, current_period_end))",
     )
     .eq("status", "scheduled")
     .is("provider_call_id", null)
@@ -174,7 +203,11 @@ Deno.serve(async (req) => {
       id: string; status: string; first_name: string;
       preferred_name: string | null; phone: string; timezone: string;
       notes: string | null; share_recordings: string;
-      family: { primary_contact_name: string; subscription_status: string | null };
+      family: {
+        primary_contact_name: string;
+        subscription_status: string | null;
+        current_period_end: string | null;
+      };
     };
 
     // Consent re-check at the last possible moment.
@@ -187,10 +220,17 @@ Deno.serve(async (req) => {
     }
 
     // Same for billing: a subscription canceled since the row was created
-    // must not result in a call.
-    if (!PAYING_STATUSES.includes(senior.family.subscription_status ?? "")) {
+    // must not result in a call. Distinguish the two ways that happens, so a
+    // family whose card simply expired is legible in the data as exactly that
+    // rather than looking like a cancellation.
+    if (!billingAllowsCall(
+      senior.family.subscription_status, senior.family.current_period_end,
+    )) {
+      const reason = senior.family.subscription_status === "past_due"
+        ? "past_due_grace_expired"
+        : "subscription_inactive";
       await supabase.from("calls")
-        .update({ status: "canceled", ended_reason: "subscription_inactive" })
+        .update({ status: "canceled", ended_reason: reason })
         .eq("id", call.id);
       report.canceled++;
       continue;

@@ -181,6 +181,43 @@ stored with `delivered_at` null and no text goes out.
 3. Save the returned assistant `id` as `VAPI_ASSISTANT_ID`, and the imported
    phone number's `id` as `VAPI_PHONE_NUMBER_ID` (step 2).
 
+### 3b. Pushing a prompt or call-length change to the live assistant
+
+`agent/vapi-assistant.json` is the source of truth, but editing it changes
+nothing on its own — the live assistant keeps running the config it was created
+with until you PATCH it. Two things make this easy to get wrong:
+
+- **A prompt change means sending the whole `model` object.** PATCH replaces
+  nested objects wholesale, so `{"model": {"messages": [...]}}` silently drops
+  `provider`, `model`, `temperature` and the `endCall` tool. Send all of them.
+- **`maxDurationSeconds` is top-level**, so it can be patched on its own safely.
+
+Build the body from the repo so the two can't drift, then patch:
+
+```sh
+ASSISTANT=d7f28f40-69a4-4c85-ad22-512f39a14dc8
+
+# System prompt = everything after the first --- in the prompt file.
+PROMPT=$(awk 'f{print} /^---$/{f=1}' agent/etta-system-prompt.md)
+
+jq -n --arg p "$PROMPT" --argjson max "$(jq .maxDurationSeconds agent/vapi-assistant.json)" \
+  --argjson model "$(jq '.model | del(.messages)' agent/vapi-assistant.json)" \
+  '{maxDurationSeconds: $max, model: ($model + {messages: [{role: "system", content: $p}]})}' \
+  > /tmp/etta-patch.json
+
+curl -X PATCH "https://api.vapi.ai/assistant/$ASSISTANT" \
+  -H "Authorization: Bearer $VAPI_API_KEY" -H 'Content-Type: application/json' \
+  -d @/tmp/etta-patch.json | jq '{maxDurationSeconds, model: .model.model, tools: (.model.tools | length)}'
+```
+
+Check the response echoes the right `maxDurationSeconds`, the right model id,
+and **`tools: 1`** — a zero there means the `endCall` tool was dropped and Etta
+can no longer hang up on her own. Then place one test call and confirm it ends
+cleanly.
+
+The same applies to the setup assistant (`0089b42e-…`) if
+`agent/etta-setup-prompt.md` changes.
+
 ## 4. Schedule the cron
 
 In the Supabase dashboard (SQL editor), enable `pg_cron` + `pg_net`
