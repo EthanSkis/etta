@@ -23,17 +23,44 @@ before the text and the same face after it.
 
 ### Reference media
 
-Both are real assets, not mockups — the point of the shot is that the thing on
-the screen is the thing the product actually sends.
+Real assets, not mockups — the point of the shot is that the thing on the
+screen is the thing the product actually sends.
 
-1. `brand/video/etta-text-message-screen.png` — the family summary text on an
-   iOS Messages thread. Copy mirrors the family-note template in
+1. `brand/video/etta-lockscreen-notification.png` — **use this one for
+   generated video.** One check-in arriving as a single lock-screen banner:
+   the mark as the app icon, the word ETTA, and one line — the green signal
+   plus "Margaret sounded bright today." Regenerate with
+   `make-lockscreen-notification.js`.
+2. `brand/etta-mark-light-512.png` — the mark on its own.
+3. `brand/video/etta-text-message-screen.png` — the full family summary on an
+   iOS Messages thread, mirroring the template in
    `supabase/functions/call-events/index.ts` (signal emoji, mood word, call
    length, the `😴 · 🥣 · 💊 · Mood` chip row, the summary, "Keeping an eye
    on:", the share link, the `— Etta` signature and the A2P 10DLC opt-out
-   line). Regenerate with `make-text-message-screen.js`.
-2. `brand/etta-mark-light-512.png` — the mark, also embedded in the above as
-   the contact avatar.
+   line). Regenerate with `make-text-message-screen.js`. **Stills and web
+   only** — see below.
+
+### Why the thread asset can't be the one on screen
+
+The first pass fed the full Messages thread as the reference. The model
+reproduced the mark faithfully — cream disc, dark `e`, terracotta dot — and
+then garbled every word around it: the thread header came back as **"Ette"**,
+the recipient as **"Margant"**, and the body as convincing-looking nonsense.
+
+That is not a prompt that needs tightening. Generative video draws text as
+texture, and the failure scales with how much of it there is; a paragraph will
+always come back wrong, and a misspelled brand name on screen is worse than no
+text at all.
+
+So the on-screen asset for any generated shot is the one-line notification. It
+is still a true send — the green signal and the mood word are exactly what the
+family note leads with — and at five words the model has a real chance of
+spelling it. It is also better filmmaking: nobody reads a paragraph in a
+three-second insert.
+
+If a future cut genuinely needs the full thread legible on a phone, the way to
+get it is compositing the PNG onto a tracked screen in post, not asking a model
+for it.
 
 ### Note on the preset recommendation
 
