@@ -1,5 +1,16 @@
 # "Seven in the morning" — Seedance 2.0 brand film
 
+## The films
+
+| File | Job ID | Notes |
+|---|---|---|
+| `etta-mother-checkin-15s-9x16.mp4` | `b46652b1-e00e-4d35-a023-560204884d07` | **Primary.** Dark-haired lead, warm kitchen, best final beat. Screen renders `ETTA` and the headline correctly. |
+| `etta-mother-checkin-15s-9x16-alt.mp4` | `fea9cb28-4aa2-41d3-a772-c794896137e5` | Alternate. Blonde lead, cooler white kitchen; stronger hand-to-forehead worry beat at 0:04. |
+
+Both 1080×1920, 24fps, 15.09s, AAC ambient audio (mean −38.8 dB — room tone, no
+music, as briefed).
+
+
 A 15-second vertical film that puts the problem on screen before it puts the
 product on screen. The buyer is the adult daughter, so she is the one we
 follow: the worry, the phone she doesn't call, the text that answers the
@@ -15,7 +26,7 @@ before the text and the same face after it.
 | Model | `seedance_2_0` (Higgsfield MCP `generate_video`) |
 | Duration | 15s |
 | Aspect ratio | 9:16 |
-| Resolution / mode | 720p / `std` — 67.5 credits. 1080p is 135. |
+| Resolution / mode | 1080p / `std` — 135 credits per take (720p is 67.5). |
 | Genre | `drama` |
 | `generate_audio` | `true` (ambient only; the prompt forbids music and dialogue) |
 | Reference media | `image_references` × 2 — see below |
@@ -70,84 +81,82 @@ Seedance. Retry with `declined_preset_id: "24bae836-2c4a-48e0-89b6-49fcc0b21612"
 
 ## Prompt
 
+The casting language is blunt on purpose. An earlier pass that asked for
+"late forties" returned a woman in her seventies — which reads as Margaret
+rather than Margaret's daughter and inverts the premise — so age and hair
+colour are now stated flatly and repeated in the negatives.
+
 ```text
-Main subject: An American woman in her late forties, ordinary and unstyled.
-Shoulder-length dark brown hair with a few greys at the temples, loosely tucked
-behind one ear, slightly unbrushed. Fine lines around tired kind eyes, no
-makeup, realistic skin texture with visible pores and faint under-eye shadows.
-Oatmeal-coloured knit cardigan over a plain white t-shirt, thin gold wedding
-band, no other jewellery. Holding a modern black smartphone. Maintain
-consistent identity, clothing, hairstyle and appearance throughout the entire
-video.
+Main subject: A woman who is clearly 46 years old — middle-aged, NOT elderly
+and NOT a senior. Thick DARK BROWN hair, shoulder length, no grey and no white
+and no blonde hair anywhere. Smooth firm skin with only fine expression lines
+around the eyes; a young-looking healthy face, no jowls, no deep wrinkles, no
+age spots. She is the adult daughter in this story, not the grandmother. No
+makeup, realistic skin texture and pores. Oatmeal knit cardigan over a plain
+white t-shirt, thin gold wedding band. Maintain this same identity, age, hair
+colour, clothing and appearance in every single shot.
 
 Location: Her own quiet suburban kitchen at 7am, before anyone else is awake.
-Worn wooden counter, a single ceramic mug of coffee going cold, a folded dish
-towel, a small potted herb on the windowsill. Soft low-angle morning sun
-through a window with thin curtains, dust motes in the light beam, warm shadows
-across the counter. A corkboard with old family photographs slightly out of
-focus in the background. No television, no other people, no pets, no clutter,
-no signage.
+Worn wooden counter, a ceramic mug of coffee going cold, a folded dish towel, a
+potted herb on the windowsill. Soft low morning sun through a curtained window,
+dust in the light, warm shadows. A corkboard of old family photographs soft in
+the background. No other people, no pets, no signage.
 
 Visual Style: Ultra-realistic intimate documentary. Warm natural window light
-only, no artificial fill. Shallow depth of field, gentle film grain, soft
-highlight rolloff, muted warm palette of cream, oat, and terracotta. Genuine
-unperformed emotion held in small physical detail — breath, jaw, shoulders, the
-corners of the eyes. No melodrama, no crying-for-camera, no acting beats.
+only. Shallow depth of field, gentle film grain, muted warm palette of cream,
+oat and terracotta. Genuine unperformed emotion held in breath, jaw and
+shoulders. No melodrama, no crying for camera.
 
-Camera Style: Quiet observational handheld. A camera that is close but never
-intrusive. Subtle breathing movement, small natural drift, slow deliberate
-reframing, one gentle push-in during the reading moment. No gimbal glide, no
-drone, no whip pans, no zoom punches, no stabilization sheen.
+Camera Style: Quiet observational handheld, close but never intrusive. Subtle
+breathing movement, small natural drift, one slow push-in on the reading
+moment. No gimbal glide, no drone, no whip pans, no zoom punches.
 
 00:00–00:03
-Medium shot. She stands alone at the counter, both hands wrapped around the
-cold mug, staring at nothing. The house is completely still. Her phone lies
-face-down beside her. She is not doing anything — she is worrying. Her thumb
-taps the mug once, unconsciously.
+Medium shot. The 46-year-old dark-haired woman stands alone at the counter,
+both hands around the cold mug, staring at nothing. The house is still. Her
+phone lies face-down beside her. She is not doing anything — she is worrying.
 
 00:03–00:06
-She turns the phone over, opens it, and her thumb hovers over a contact simply
-named Mom. She holds it there. She does not press it. A long breath out, eyes
-closing briefly, and she sets the phone back down on the counter and presses
-her fingertips to her forehead. The camera stays with her, slightly too long.
+She turns the phone over, opens it, and her thumb hovers over one contact. She
+holds it there. She does not press it. A long breath out, and she sets the
+phone back down and presses her fingertips to her forehead.
 
 00:06–00:08
-A single short vibration rattles the phone against the wooden counter. Her head
-turns down toward it fast — a flash of fear before anything else. She picks it
-up with both hands.
+One short vibration rattles the phone against the wooden counter. Her head
+turns down fast — a flash of fear before anything else. She picks it up.
 
 00:08–00:11
-Tight over-the-shoulder insert of the phone screen filling most of the frame,
-held steady and in sharp focus. The screen shows EXACTLY the referenced
-text-message screenshot, reproduced faithfully and legibly: the cream circular
-Etta logo avatar with a dark lowercase letter e and a small terracotta dot at
-the top of the thread, the contact name Etta beneath it, and a grey message
-bubble beginning with a green circle and the words Etta's check-in with
-Margaret. Her thumb scrolls the message down a little as she reads. The text
-remains crisp, correctly spelled, and unwarped throughout — do not invent,
-replace, or garble any words on the screen.
+Insert shot of the phone screen. The phone is held completely still, flat and
+square to the camera, screen parallel to the lens with no tilt and no
+perspective skew, filling the centre of the frame in sharp focus. The screen is
+a dark warm-brown lock screen exactly matching the reference image: a large
+white clock reading 7:04 near the top, and one pale rounded notification card
+below it. The card contains the cream Etta app icon with a dark lowercase
+letter e and a small orange dot, then the single word ETTA in small capitals,
+then one short line of black text: a green dot followed by the words Margaret
+sounded bright today. Those are the ONLY words anywhere on the screen. Render
+them large, crisp, high-contrast and correctly spelled — ETTA spelled E-T-T-A
+and Margaret spelled M-A-R-G-A-R-E-T. Do not add any other text, do not add
+message bubbles, do not add paragraphs, do not invent extra lines.
 
 00:11–00:13
 Cut to her face, phone still raised, reading. The change is small and
-involuntary: her jaw unclenches, her shoulders drop a full inch, her eyes go
-glassy and she blinks it back. A breath she has been holding all morning
-finally leaves her.
+involuntary: her jaw unclenches, her shoulders drop, her eyes go glassy and she
+blinks it back. A breath she has been holding all morning finally leaves her.
 
 00:13–00:15
-She lowers the phone and holds it lightly against her chest, closes her eyes,
-and a small real smile arrives — relief, not joy. Morning light crosses her
-face. She opens her eyes and looks toward the window. Hold, then a soft cut to
-black.
+She lowers the phone and holds it against her chest, closes her eyes, and a
+small real smile arrives — relief, not joy. Morning light crosses her face. She
+opens her eyes toward the window. Hold, then a soft cut to black.
 
-Audio: Natural ambient sound only — the low hum of a refrigerator, faint birds
-outside, one short phone vibration buzzing against wood, the ceramic mug
-settling, her breathing in and out, the quiet rustle of knit fabric, distant
-early-morning street tone. No music. No dialogue. No narration. No sound design
-flourishes.
+Audio: Natural ambient sound only — refrigerator hum, faint birds outside, one
+short phone vibration against wood, the mug settling, her breathing, knit
+fabric, distant early-morning street tone. No music. No dialogue. No narration.
 
-Negative: no text overlays, no captions, no subtitles, no watermarks, no logos
-anywhere except the Etta logo on the phone screen, no other brands, no second
-person entering frame, no phone call being answered, no smiling at the camera.
+Negative: no elderly woman, no grey hair, no white hair, no senior citizen as
+the main subject, no text overlays, no captions, no subtitles, no watermarks,
+no paragraphs of text on the phone, no logos except the Etta icon, no second
+person in frame, no phone call being answered.
 ```
 
 ## Why these choices
@@ -158,18 +167,21 @@ business: calling every day yourself is unsustainable, and not calling costs
 you the morning. Leading with the product would make it an ad for a texting
 service.
 
-**The screen is a real send, not a prop.** The bubble is the actual family-note
-format, opt-out line and all. A viewer who signs up gets this exact text, which
-is the only version of this shot that survives contact with a customer.
+**The screen is a real send, not a prop.** The banner carries the green signal
+and the mood word the family note actually leads with, from the real mark. A
+viewer who signs up gets this, which is the only version of the shot that
+survives contact with a customer.
 
 **The green signal does the work.** The family note opens with a colour that
 reads from the lock screen — 🟢 here, and 🔴 reserved for "needs attention."
-The film is built so the relief lands on that first character, before she has
-read a word.
+The film is built so the relief lands on that dot, before she has read a word.
 
-**The watch item stays in.** The message says the knee is stiffer on stairs.
-Trimming it to pure good news would sell a product that only ever reassures;
-the flag is what makes the reassurance worth anything.
+**What the one-liner gives up.** The full note also carries the chip row and
+the watch item — "left knee stiffer on stairs" — and that flag is what makes
+the reassurance worth anything: a product that only ever says good news isn't
+worth paying for. The banner cut can't hold it. If this film is the top of a
+sequence, the piece after it should be the one that shows the whole note, on a
+composited screen rather than a generated one.
 
 **No music, no voiceover.** Every competitor in this category advertises with
 strings and a narrator. Silence and room tone is the same posture as the
