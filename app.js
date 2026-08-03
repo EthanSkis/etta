@@ -12,6 +12,18 @@
     });
   }
 
+  /* ---------- open the answer a link points at (e.g. /faq#recordings) ---------- */
+  function openTarget() {
+    var id = decodeURIComponent(window.location.hash.slice(1));
+    if (!id) return;
+    var el = document.getElementById(id);
+    if (!el) return;
+    if (el.tagName === "DETAILS") el.open = true;
+    el.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+  window.addEventListener("hashchange", openTarget);
+  openTarget();
+
   /* ---------- reveal on scroll ---------- */
   var io = new IntersectionObserver(function (entries) {
     entries.forEach(function (e) {
