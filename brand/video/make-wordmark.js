@@ -80,13 +80,44 @@ function svg(wordColour) {
 </svg>`;
 }
 
+// Pill lockup: the wordmark on a fully-rounded plate, transparent outside it.
+// A rectangle would fight the mark, which is a circle, and the round terminals
+// of Fraunces; the radius is half the height so the ends are true semicircles
+// rather than a rounded rectangle.
+//
+// Proportions are the ones that read as a badge rather than a button: the plate
+// is 2.1x the height of the letterforms, and the side padding is 0.55x the
+// plate height so the curve of the end clears the letters instead of pinching
+// them. "etta." has no descenders, so the letterforms are centred on their own
+// bounding box — the visual mass sits between baseline and ascender.
+const PILL_PAD_Y = 0.55;   // x letterform height, per side
+const PILL_PAD_X = 0.55;   // x plate height, per side
+
+function svgPill(plateColour, wordColour) {
+  const padY = H * PILL_PAD_Y;
+  const plateH = H + padY * 2;
+  const padX = plateH * PILL_PAD_X;
+  const plateW = W + padX * 2;
+  const x0 = minX - padX;
+  const y0 = minY - padY;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0} ${y0} ${plateW} ${plateH}" width="${Math.round(plateW)}" height="${Math.round(plateH)}" role="img" aria-label="etta">
+  <title>etta</title>
+  <rect x="${x0}" y="${y0}" width="${plateW}" height="${plateH}" rx="${plateH / 2}" ry="${plateH / 2}" fill="${plateColour}"/>
+  <g fill="${wordColour}">${word.glyphs.map((g) => `<path d="${g.d}"/>`).join('')}</g>
+  <g fill="${TERRA}">${dot.glyphs.map((g) => `<path d="${g.d}"/>`).join('')}</g>
+</svg>`;
+}
+
 const variants = [
-  ['etta-wordmark-ink.svg', INK],       // for light footage
-  ['etta-wordmark-paper.svg', PAPER],   // for dark footage
-  ['etta-wordmark-white.svg', '#FFFFFF'],
+  ['etta-wordmark-ink.svg', () => svg(INK)],          // for light footage
+  ['etta-wordmark-paper.svg', () => svg(PAPER)],      // for dark footage
+  ['etta-wordmark-white.svg', () => svg('#FFFFFF')],
+  // Plate lockups — drop straight onto footage of any brightness.
+  ['etta-wordmark-pill-white.svg', () => svgPill('#FFFFFF', INK)],
+  ['etta-wordmark-pill-paper.svg', () => svgPill(PAPER, INK)],
 ];
-for (const [name, colour] of variants) {
-  fs.writeFileSync(path.join(OUT, name), svg(colour));
+for (const [name, build] of variants) {
+  fs.writeFileSync(path.join(OUT, name), build());
   console.log('wrote', name);
 }
 
@@ -95,15 +126,19 @@ for (const [name, colour] of variants) {
   const { chromium } = require('playwright');
   const browser = await chromium.launch();
   const TARGET_W = 4000;
-  const scale = TARGET_W / W;
-  for (const [name, colour] of variants) {
+  for (const [name, build] of variants) {
     const png = name.replace('.svg', '.png');
+    const markup = build();
+    // Read the art's own size back out so pill and bare lockups both land at
+    // TARGET_W rather than the pill overshooting by its padding.
+    const vw = Number(markup.match(/width="(\d+)"/)[1]);
+    const vh = Number(markup.match(/height="(\d+)"/)[1]);
     const page = await browser.newPage({
-      viewport: { width: Math.round(W), height: Math.round(H) },
-      deviceScaleFactor: scale,
+      viewport: { width: vw, height: vh },
+      deviceScaleFactor: TARGET_W / vw,
     });
     await page.setContent(
-      `<style>html,body{margin:0;padding:0;background:transparent}svg{display:block}</style>${svg(colour)}`,
+      `<style>html,body{margin:0;padding:0;background:transparent}svg{display:block}</style>${markup}`,
       { waitUntil: 'load' },
     );
     await page.screenshot({ path: path.join(OUT, png), omitBackground: true });
