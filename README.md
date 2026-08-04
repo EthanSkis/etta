@@ -51,7 +51,9 @@ consent, always. Full concept: [`business-description.md`](business-description.
       add-on is held
 - [ ] `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` Supabase secrets so checkout works
 - [ ] Rename the Stripe account's public/statement name off "funshirts.us"
-- [ ] Twilio: upgrade off trial + A2P 10DLC registration before real families
+- [x] Twilio: off trial, A2P 10DLC brand + campaign approved; call → summary →
+      text verified end to end (Sole Proprietor brand — a summary is 8 segments
+      against a 1 seg/sec cap, see the runbook before scaling)
 - [ ] TCPA attorney sign-off on the consent flow (launch blocker)
 - [ ] Create the Stripe prices for the new plan and add-ons, or let the code
       create them on first sale (see the runbook)
