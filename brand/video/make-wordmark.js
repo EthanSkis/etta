@@ -32,51 +32,65 @@ const TRACKING = -0.02;          // letter-spacing: -.02em
 
 const font = opentype.parse(fs.readFileSync(FONT));
 
-/** Lay out a string with em-based tracking, returning per-glyph paths. */
-function layout(text, startX, y) {
-  const out = [];
+/**
+ * Lay out a sequence of coloured runs on one baseline, with em-based tracking,
+ * returning path data per run plus the tight bounding box across all of them.
+ *
+ * A run is {text, accent}: accent runs take the terracotta, everything else
+ * takes the lockup's word colour. That is what lets "etta." and
+ * "ettacalls.com" share one code path — in both, the accent run is the dot.
+ */
+function layoutRuns(runs, startX, baseline) {
   let x = startX;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    const glyph = font.charToGlyph(ch);
-    out.push({ ch, d: glyph.getPath(x, y, FONT_SIZE).toPathData(3) });
-    x += (glyph.advanceWidth / font.unitsPerEm) * FONT_SIZE + FONT_SIZE * TRACKING;
-  }
-  return { glyphs: out, endX: x };
+  const b = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
+  const laid = runs.map((run) => {
+    const paths = [];
+    for (const ch of run.text) {
+      const glyph = font.charToGlyph(ch);
+      const path = glyph.getPath(x, baseline, FONT_SIZE);
+      paths.push(path.toPathData(3));
+      const gb = path.getBoundingBox();
+      b.x1 = Math.min(b.x1, gb.x1); b.y1 = Math.min(b.y1, gb.y1);
+      b.x2 = Math.max(b.x2, gb.x2); b.y2 = Math.max(b.y2, gb.y2);
+      x += (glyph.advanceWidth / font.unitsPerEm) * FONT_SIZE + FONT_SIZE * TRACKING;
+    }
+    return { paths, accent: !!run.accent };
+  });
+  return { runs: laid, bounds: b };
 }
 
 const PAD = 60;
-const baseline = FONT_SIZE;
-const word = layout('etta', PAD, baseline);
-const dot = layout('.', word.endX, baseline);
+const BASELINE = FONT_SIZE;
 
-// Tight bounds across every glyph, so the exported art has no dead margin.
-function bounds(text, startX) {
-  let x = startX;
-  let b = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
-  for (const ch of text) {
-    const glyph = font.charToGlyph(ch);
-    const gb = glyph.getPath(x, baseline, FONT_SIZE).getBoundingBox();
-    b.x1 = Math.min(b.x1, gb.x1); b.y1 = Math.min(b.y1, gb.y1);
-    b.x2 = Math.max(b.x2, gb.x2); b.y2 = Math.max(b.y2, gb.y2);
-    x += (glyph.advanceWidth / font.unitsPerEm) * FONT_SIZE + FONT_SIZE * TRACKING;
-  }
-  return b;
+/** A lockup: the laid-out art plus the geometry every exporter needs. */
+function lockup(label, runs) {
+  const { runs: laid, bounds: b } = layoutRuns(runs, PAD, BASELINE);
+  return {
+    label,
+    runs: laid,
+    minX: b.x1, minY: b.y1,
+    W: b.x2 - b.x1,
+    H: b.y2 - b.y1,
+  };
 }
-let minX, minY, maxX, maxY;
-const wb = bounds('etta', PAD);
-const db = bounds('.', word.endX);
-minX = Math.min(wb.x1, db.x1); minY = Math.min(wb.y1, db.y1);
-maxX = Math.max(wb.x2, db.x2); maxY = Math.max(wb.y2, db.y2);
 
-const W = maxX - minX;
-const H = maxY - minY;
+const WORDMARK = lockup('etta', [{ text: 'etta' }, { text: '.', accent: true }]);
+// The domain reuses the brand's terracotta full stop as the dot of .com.
+const DOMAIN = lockup('ettacalls.com', [
+  { text: 'ettacalls' }, { text: '.', accent: true }, { text: 'com' },
+]);
 
-function svg(wordColour) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${W} ${H}" width="${Math.round(W)}" height="${Math.round(H)}" role="img" aria-label="etta">
-  <title>etta</title>
-  <g fill="${wordColour}">${word.glyphs.map((g) => `<path d="${g.d}"/>`).join('')}</g>
-  <g fill="${TERRA}">${dot.glyphs.map((g) => `<path d="${g.d}"/>`).join('')}</g>
+function paint(lk, wordColour) {
+  return lk.runs
+    .map((r) => `<g fill="${r.accent ? TERRA : wordColour}">${
+      r.paths.map((d) => `<path d="${d}"/>`).join('')}</g>`)
+    .join('');
+}
+
+function svg(lk, wordColour) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${lk.minX} ${lk.minY} ${lk.W} ${lk.H}" width="${Math.round(lk.W)}" height="${Math.round(lk.H)}" role="img" aria-label="${lk.label}">
+  <title>${lk.label}</title>
+  ${paint(lk, wordColour)}
 </svg>`;
 }
 
@@ -93,28 +107,31 @@ function svg(wordColour) {
 const PILL_PAD_Y = 0.55;   // x letterform height, per side
 const PILL_PAD_X = 0.55;   // x plate height, per side
 
-function svgPill(plateColour, wordColour) {
-  const padY = H * PILL_PAD_Y;
-  const plateH = H + padY * 2;
+function svgPill(lk, plateColour, wordColour) {
+  const padY = lk.H * PILL_PAD_Y;
+  const plateH = lk.H + padY * 2;
   const padX = plateH * PILL_PAD_X;
-  const plateW = W + padX * 2;
-  const x0 = minX - padX;
-  const y0 = minY - padY;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0} ${y0} ${plateW} ${plateH}" width="${Math.round(plateW)}" height="${Math.round(plateH)}" role="img" aria-label="etta">
-  <title>etta</title>
+  const plateW = lk.W + padX * 2;
+  const x0 = lk.minX - padX;
+  const y0 = lk.minY - padY;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0} ${y0} ${plateW} ${plateH}" width="${Math.round(plateW)}" height="${Math.round(plateH)}" role="img" aria-label="${lk.label}">
+  <title>${lk.label}</title>
   <rect x="${x0}" y="${y0}" width="${plateW}" height="${plateH}" rx="${plateH / 2}" ry="${plateH / 2}" fill="${plateColour}"/>
-  <g fill="${wordColour}">${word.glyphs.map((g) => `<path d="${g.d}"/>`).join('')}</g>
-  <g fill="${TERRA}">${dot.glyphs.map((g) => `<path d="${g.d}"/>`).join('')}</g>
+  ${paint(lk, wordColour)}
 </svg>`;
 }
 
 const variants = [
-  ['etta-wordmark-ink.svg', () => svg(INK)],          // for light footage
-  ['etta-wordmark-paper.svg', () => svg(PAPER)],      // for dark footage
-  ['etta-wordmark-white.svg', () => svg('#FFFFFF')],
+  ['etta-wordmark-ink.svg', () => svg(WORDMARK, INK)],       // for light footage
+  ['etta-wordmark-paper.svg', () => svg(WORDMARK, PAPER)],   // for dark footage
+  ['etta-wordmark-white.svg', () => svg(WORDMARK, '#FFFFFF')],
   // Plate lockups — drop straight onto footage of any brightness.
-  ['etta-wordmark-pill-white.svg', () => svgPill('#FFFFFF', INK)],
-  ['etta-wordmark-pill-paper.svg', () => svgPill(PAPER, INK)],
+  ['etta-wordmark-pill-white.svg', () => svgPill(WORDMARK, '#FFFFFF', INK)],
+  ['etta-wordmark-pill-paper.svg', () => svgPill(WORDMARK, PAPER, INK)],
+  // Domain lockup, for end cards and lower thirds.
+  ['ettacalls-com-ink.svg', () => svg(DOMAIN, INK)],
+  ['ettacalls-com-paper.svg', () => svg(DOMAIN, PAPER)],
+  ['ettacalls-com-white.svg', () => svg(DOMAIN, '#FFFFFF')],
 ];
 for (const [name, build] of variants) {
   fs.writeFileSync(path.join(OUT, name), build());
