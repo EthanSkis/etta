@@ -15,7 +15,7 @@ Already provisioned — steps 1, 3 and 4 below are ✅ done:
 | Twilio number | `+1 762 239 4275` ("Etta outbound", imported into Vapi) |
 | Vapi phone number id | `bf43dc1e-9d25-400c-87ef-607a51641419` |
 | Cron | `etta-place-due-calls`, every 10 min (pg_cron job 1) |
-| Summary delivery | **SMS from Etta's own number** (+1 762 239 4275) — deliberately no email and no app, on either side of the product. Test text delivered. |
+| Summary delivery | **SMS from Etta's own number** (+1 762 239 4275) — deliberately no email and no app, on either side of the product. A2P 10DLC registered; test text confirmed `delivered` by the carrier on 2026-08-04. |
 | Stripe (LIVE) | Products + prices created: Standard `price_1TzO26A8l4yd6OUzIGnqRkhB` ($19), Daily `price_1TzO27A8l4yd6OUzhi1l2T3b` ($39). Webhook endpoint `we_1TzO7NA8l4yd6OUz2KTnJvVJ`. Customer portal configured. **`STRIPE_SECRET_KEY` must be the FULL revealed key.** Copying it from the dashboard while still masked yields something like `sk_live_51ABC…wXyZ`; the `…` is U+2026, which `fetch` rejects as an invalid header before Stripe is ever contacted — checkout then 502s with no Stripe-side trace. `signup` now detects this and returns a clear 503 instead. |
 
 ### ⚠️ Two Stripe things to fix before taking real money
@@ -33,18 +33,42 @@ Already provisioned — steps 1, 3 and 4 below are ✅ done:
 — the values live outside this repo. Until then the scheduler answers the cron
 with 401, which is safe and by design.
 
-### 🚨 SMS does not deliver yet — A2P 10DLC (blocker)
+### ✅ SMS delivers — A2P 10DLC cleared (2026-08-04)
 
-Every summary and escalation text so far has come back from Twilio as
-`undelivered`, **error 30034: message from an unregistered A2P 10DLC sender**.
-US carriers block application-to-person SMS on long-code numbers until the
-sender is registered — verifying a number for the trial does *not* help, and
-nothing about it is visible in Etta's own logs, because Twilio accepts the
-message and the carrier rejects it asynchronously.
+Registration is done and texts reach real handsets. Verified end to end on
+2026-08-04 by sending one message from `+1 762 239 4275` and polling the
+message resource until the carrier's verdict came back — `delivered`, no
+`error_code`, inside three seconds. The old failure was **error 30034:
+message from an unregistered A2P 10DLC sender**; US carriers block
+application-to-person SMS on long-code numbers until the sender is
+registered, and nothing about it is visible in Etta's own logs, because
+Twilio accepts the message and the carrier rejects it asynchronously.
 
-Voice calls are unaffected: those work today on verified numbers.
+| Thing | Value |
+|---|---|
+| Brand | `BN027d32b797ca3ae03ec5cc6fe7e14e4c` — **APPROVED**, identity VERIFIED |
+| Brand type | ⚠️ **SOLE_PROPRIETOR** (see the ceiling below) |
+| Campaign | `CNMVRV3` — **VERIFIED**, registered 2026-08-01 |
+| Messaging Service | `MG415d8222b20e6344d150305d82bd93cd` ("Sole Proprietor A2P Messaging Service") |
+| Number on the service | `+1 762 239 4275` |
 
-To fix, in the Twilio Console:
+**Always re-test by polling, never by the 201.** Twilio returns success the
+moment it accepts a message; a carrier block arrives seconds later on the
+message resource. `GET /2010-04-01/Accounts/<sid>/Messages/<msgSid>.json`
+until `status` is `delivered`/`undelivered`/`failed` is the only real check.
+
+⚠️ **The brand registered is Sole Proprietor, not Standard.** That caps this
+account permanently at **one campaign, one phone number, 3,000 segments/day
+and 1 segment/sec**, and cannot be upgraded in place. At ~4 segments per
+family per day the daily ceiling is roughly 700 daily-plan families — fine
+for launch — but the 1 seg/sec throughput starts delaying summaries well
+before that, because the every-10-min cron ends calls in bursts. Migrating to
+Standard means an EIN (free from irs.gov, no LLC needed), a second brand, a
+second $15 vetting fee, re-pointing the number, and a delivery gap while live
+families depend on the escalation texts. Plan that migration before volume
+gets near the cap, not after.
+
+How it was registered, for the record:
 
 1. Upgrade off the trial (A2P registration requires a paid account).
 2. Messaging → Regulatory Compliance → **A2P 10DLC**: register a **Brand**,
@@ -52,18 +76,6 @@ To fix, in the Twilio Console:
 3. Attach `+1 762 239 4275` to a **Messaging Service** linked to that campaign.
    This does not disturb Vapi — a Messaging Service governs SMS only, and the
    number's voice webhook stays pointed at Vapi.
-
-**Get an EIN and register a Standard brand — not Sole Proprietor.** A sole
-proprietor can get an EIN free from irs.gov in about fifteen minutes; no LLC
-needed. The two paths cost near enough the same ($4.50 brand + $15 campaign
-vetting + $2/mo either way), but Sole Proprietor caps you permanently at
-**one campaign, one phone number, 3,000 segments/day and 1 segment/sec**, and
-cannot be upgraded in place. At ~4 segments per family per day that ceiling is
-roughly 700 daily-plan families — fine for launch — but the 1 seg/sec
-throughput starts delaying summaries well before that, because the every-10-min
-cron ends calls in bursts. Migrating later means a second brand, a second $15
-vetting fee, re-pointing the number, and a delivery gap while live families
-depend on the escalation texts. Do it right the first time.
 
 **Campaign registration answers** (the fields as Twilio asks them):
 
@@ -110,16 +122,15 @@ Two things to get right when shipping that:
   real opt-in from them or accept that the audit trail starts at the first
   checkbox signup — don't let a null row be mistaken for a recorded yes.
 
-Until this clears, treat the family-notification half of the product as
-non-functional, and note that `call_summaries.delivered_at` currently means
-"Twilio accepted it", not "the family received it" — the code logs each
-message SID so failures can be traced in the Twilio console.
+Note that `call_summaries.delivered_at` still means "Twilio accepted it", not
+"the family received it" — the code logs each message SID, so a message that
+the carrier later rejects has to be traced in the Twilio console rather than
+in Etta's own tables.
 
-**Twilio trial caveats:** the account is on trial, so (a) Etta can only call
-or text numbers you've verified (Console → Phone Numbers → Verified Caller
-IDs — add your own cell for the self-pilot), and (b) Twilio plays a short
-trial notice before each call and prefixes trial texts. Upgrading the
-account removes both.
+**Twilio trial caveats** (historical — the account is off trial now, which is
+what made A2P registration possible): on trial, Etta could only call or text
+numbers verified in Console → Phone Numbers → Verified Caller IDs, and Twilio
+played a trial notice before each call and prefixed trial texts.
 
 ## How the pieces fit
 
@@ -553,13 +564,10 @@ The next cron tick after 9:00 senior-time places the first call.
   consent states like California); keep it in every setup call verbatim.
 - Track the FCC's proposed AI-disclosure rule — Etta's first message already
   does what the proposal asks, but confirm when it finalizes.
-- **A2P 10DLC registration** (Twilio Console → Messaging → Regulatory
-  Compliance) before real families: US carriers filter unregistered
-  long-code SMS once you're off trial. Register the brand + a "customer
-  care / account notifications" campaign; summary texts to people who
-  signed up fit squarely. Family members text STOP → Twilio blocks them
-  automatically (carrier-mandated); record it and stop expecting
-  deliveries to that number.
+- **A2P 10DLC registration** — done: brand approved, campaign `CNMVRV3`
+  verified, delivery confirmed 2026-08-04 (details in *Live state* above).
+  Family members text STOP → Twilio blocks them automatically
+  (carrier-mandated); record it and stop expecting deliveries to that number.
 - Keep `consent_events` append-only forever; it is the legal record.
 
 ## Not built yet (deliberately)
