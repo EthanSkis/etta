@@ -35,14 +35,27 @@ with 401, which is safe and by design.
 
 ### ✅ SMS delivers — A2P 10DLC cleared (2026-08-04)
 
-Registration is done and texts reach real handsets. Verified end to end on
-2026-08-04 by sending one message from `+1 762 239 4275` and polling the
-message resource until the carrier's verdict came back — `delivered`, no
-`error_code`, inside three seconds. The old failure was **error 30034:
-message from an unregistered A2P 10DLC sender**; US carriers block
-application-to-person SMS on long-code numbers until the sender is
+Registration is done and texts reach real handsets. The old failure was
+**error 30034: message from an unregistered A2P 10DLC sender**; US carriers
+block application-to-person SMS on long-code numbers until the sender is
 registered, and nothing about it is visible in Etta's own logs, because
 Twilio accepts the message and the carrier rejects it asynchronously.
+
+Verified twice on 2026-08-04, both by polling the message resource for the
+carrier's verdict rather than trusting the send:
+
+1. **Bare send** — one message from `+1 762 239 4275`, `delivered`, no
+   `error_code`, inside three seconds.
+2. **Full pipeline** — a test senior pointed at the founder's own phone, a
+   schedule due now, `place-due-calls` invoked with the cron secret. Etta
+   placed the call through Vapi, talked for 148s, ended it herself
+   (`assistant-ended-call`), the webhook wrote a 1,948-char transcript and a
+   structured summary (mood 4/5, ate ✓, slept ✓, meds ✗, no flags), and the
+   family text was `delivered` twelve seconds after the call ended. Test rows
+   deleted afterwards.
+
+The message history on that number is its own before-and-after: `30034`
+undelivered on 1–2 Aug, `delivered` on 4 Aug, same sender, same code path.
 
 | Thing | Value |
 |---|---|
@@ -59,14 +72,26 @@ until `status` is `delivered`/`undelivered`/`failed` is the only real check.
 
 ⚠️ **The brand registered is Sole Proprietor, not Standard.** That caps this
 account permanently at **one campaign, one phone number, 3,000 segments/day
-and 1 segment/sec**, and cannot be upgraded in place. At ~4 segments per
-family per day the daily ceiling is roughly 700 daily-plan families — fine
-for launch — but the 1 seg/sec throughput starts delaying summaries well
-before that, because the every-10-min cron ends calls in bursts. Migrating to
+and 1 segment/sec**, and cannot be upgraded in place.
+
+**A real check-in summary measured 8 segments**, not the ~4 the earlier
+estimate assumed — the emoji header alone forces the whole body to UCS-2, which
+drops the per-segment budget from 153 GSM-7 characters to 67. So:
+
+- **Daily ceiling:** 3,000 ÷ 8 ≈ **375 daily-plan families**, half the
+  previous estimate. A no-answer escalation is ~5 segments on top.
+- **Throughput ceiling bites first.** At 1 segment/sec one summary occupies
+  the sender for 8 seconds, and the every-10-min cron ends calls in bursts —
+  so ~7 families finishing in the same tick already means the last summary
+  lands a minute late. That is the number to watch, not the daily total.
+
+Shortening the body is the cheap lever if this bites before the migration
+does; dropping the emoji entirely would roughly halve the segment count, at
+the cost of the lock-screen signal the format is built around. Migrating to
 Standard means an EIN (free from irs.gov, no LLC needed), a second brand, a
 second $15 vetting fee, re-pointing the number, and a delivery gap while live
-families depend on the escalation texts. Plan that migration before volume
-gets near the cap, not after.
+families depend on the escalation texts. Plan it before volume gets near the
+cap, not after.
 
 How it was registered, for the record:
 
