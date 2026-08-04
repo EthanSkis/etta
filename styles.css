@@ -75,6 +75,15 @@ header{
   pointer-events:none;
 }
 .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center;position:relative}
+.yc-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:7px 14px 7px 12px;margin-bottom:20px;
+  background:var(--card);border:1px solid var(--line);border-radius:999px;
+  font-size:.82rem;line-height:1;color:var(--ink-soft);
+  box-shadow:0 1px 2px rgba(46,32,20,.05);
+}
+.yc-badge img{display:block;border-radius:3px}
+.yc-badge b{font-weight:700;color:var(--ink)}
 .kicker{
   display:inline-flex;align-items:center;gap:9px;
   font-size:.82rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--terra);
